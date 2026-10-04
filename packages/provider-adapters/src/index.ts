@@ -1,2 +1,4 @@
-// ProviderAdapter<T> implementations registered by role (PLAN §6): oura, strava, terra.
-export {};
+// ProviderAdapter<T> contract + registry (PLAN §6). Concrete adapters (oura, strava, terra)
+// live in their own phases' folders and register themselves into the registry.
+export * from './types';
+export * from './registry';

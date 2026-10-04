@@ -47,6 +47,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@rd/provider-adapters':
+        specifier: workspace:*
+        version: link:../../packages/provider-adapters
       '@rd/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -121,7 +124,11 @@ importers:
 
   infra/cdk: {}
 
-  packages/provider-adapters: {}
+  packages/provider-adapters:
+    dependencies:
+      '@rd/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
 
   packages/scoring-engine: {}
 

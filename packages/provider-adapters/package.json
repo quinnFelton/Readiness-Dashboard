@@ -6,6 +6,9 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "dependencies": {
+    "@rd/shared-types": "workspace:*"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
