@@ -1,7 +1,7 @@
 ---
 name: module-tester
 description: Independently tests one finished module on its branch - reviews the code against PLAN.md, adds missing unit and integration tests, runs the suite, and reports pass or fail. Does not fix product code.
-tools: Read, Write, Edit, Bash, Glob, Grep
+tools: Read, Write, Edit, Bash, Glob, Grep, StructuredOutput
 model: sonnet
 color: yellow
 ---

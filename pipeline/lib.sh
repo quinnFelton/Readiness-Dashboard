@@ -43,6 +43,8 @@ prepare_worktree() {
     git -C "$ROOT" show-ref --verify --quiet "refs/remotes/$start" || start="$base"
     git -C "$ROOT" worktree add -b "$branch" "$wt" "$start" >&2
   fi
+  # Fresh worktrees have no node_modules; agents can't always install them (permission prompts are off).
+  (cd "$wt" && pnpm install --frozen-lockfile --prefer-offline >&2) || log "WARNING: pnpm install failed in $wt"
   echo "$wt"
 }
 
