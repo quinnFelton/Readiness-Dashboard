@@ -29,6 +29,24 @@ phase_meta() {
 
 worktree_path() { echo "$WT_ROOT/${1//\//-}"; }
 
+# worktree_db <worktree> -> prints a DATABASE_URL for a database private to that worktree.
+# Parallel phases add different migrations; on a shared DB node-pg-migrate would reject the
+# migrations it can't find on the other branches. Falls back to the shared URL on any failure.
+worktree_db() {
+  local name base
+  name="wt_$(basename "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '_')"
+  base="${DATABASE_URL%/*}"
+  if docker compose -f "$ROOT/docker-compose.yml" exec -T db \
+       psql -U rd -d readiness -tAc "SELECT 1 FROM pg_database WHERE datname='$name'" 2>/dev/null | grep -q 1 ||
+     docker compose -f "$ROOT/docker-compose.yml" exec -T db \
+       psql -U rd -d readiness -qc "CREATE DATABASE $name" >/dev/null 2>&1; then
+    echo "$base/$name"
+  else
+    log "WARNING: couldn't create database $name; using shared $DATABASE_URL"
+    echo "$DATABASE_URL"
+  fi
+}
+
 # prepare_worktree <branch> <base> -> prints worktree path, ready on <branch>
 prepare_worktree() {
   local branch="$1" base="$2" wt
@@ -80,8 +98,9 @@ run_claude() {
     echo "$out"; return 0
   fi
   log "$label: running agent '$agent' in $wt"
+  local dburl; dburl="$(worktree_db "$wt")"
   set +e
-  (cd "$wt" && claude -p "$prompt" \
+  (cd "$wt" && DATABASE_URL="$dburl" claude -p "$prompt" \
       --agent "$agent" \
       --permission-mode "$PERMISSION_MODE" \
       --permission-prompts none \
