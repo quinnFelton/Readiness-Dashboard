@@ -11,6 +11,9 @@ wt="$(prepare_worktree "$branch" main)"
 prompt="Integrate stage $stage. Merge these branches in this order: $*.
 Follow your integrator instructions and write docs/reports/integration-$stage.md. Do not push; the pipeline pushes."
 # INTEGRATE_NOTES: owner-requested cross-phase work (e.g. app wiring no phase owns).
+# pipeline/notes/integrate-<stage>.md is read automatically when INTEGRATE_NOTES is unset.
+notes_file="$PIPE/notes/integrate-$stage.md"
+[ -n "${INTEGRATE_NOTES:-}" ] || [ ! -f "$notes_file" ] || INTEGRATE_NOTES="$(cat "$notes_file")"
 [ -z "${INTEGRATE_NOTES:-}" ] || prompt="$prompt
 
 ## Owner-requested integration work (do this after merging; list it in the report)

@@ -32,6 +32,7 @@ Logs (JSON incl. estimated cost and session_id) land in `pipeline/logs/`. To con
 by hand: `claude --resume <session_id>` from that phase's worktree.
 
 ## Changing the plan
+- Cross-phase wiring for a stage goes in `pipeline/notes/integrate-<stage>.md`; integrate.sh passes it to the integrator.
 - Add or reorder phases in `manifest.tsv` (id, agent, branch, base) and add `phases/<id>.md`.
 - Edit stage composition in `run-stage.sh` (the `case` block).
 - Update `docs/OWNERSHIP.md` whenever you add a phase, or parallel agents will collide.
