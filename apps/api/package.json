@@ -14,6 +14,7 @@
     "db:migrate:create": "node-pg-migrate create --migrations-dir db/migrations --migration-file-language sql"
   },
   "dependencies": {
+    "@rd/provider-adapters": "workspace:*",
     "@rd/shared-types": "workspace:*",
     "express": "^5.2.1",
     "pg": "^8.23.1",
