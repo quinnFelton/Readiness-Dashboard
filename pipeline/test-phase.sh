@@ -19,7 +19,13 @@ test_once() {
 
 $(cat "$PIPE/phases/$id.md")
 
-Follow your module-tester instructions. Write the report to docs/reports/$id-test-report.md. Only edit test files and that report. Do not switch branches or push."
+Follow your module-tester instructions. Write the report to docs/reports/$id-test-report.md. Only edit test files and that report. Do not switch branches or push.
+Before running tests, apply this branch's migrations with \`pnpm db:migrate\` (DATABASE_URL is already set)."
+  # TEST_NOTES: owner decisions (e.g. approved spec deviations) the tester must honor.
+  [ -z "${TEST_NOTES:-}" ] || prompt="$prompt
+
+## Owner decisions (approved; do not fail the phase on these)
+$TEST_NOTES"
   out="$(run_claude "$wt" module-tester "$prompt" "phase-$id-test" --json-schema "$schema")" || return 2
   push_and_cleanup "$wt" "$branch"
   local passed summary

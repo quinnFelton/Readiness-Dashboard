@@ -8,6 +8,8 @@ LOGS="$PIPE/logs"
 WT_ROOT="${WT_ROOT:-$(dirname "$ROOT")/$(basename "$ROOT")-worktrees}"
 PERMISSION_MODE="${PERMISSION_MODE:-acceptEdits}"   # or: auto
 DRY_RUN="${DRY_RUN:-0}"
+# Local dev DB for agents' `pnpm db:migrate` / DB tests (an env-prefixed command wouldn't match the `pnpm *` allow rule).
+export DATABASE_URL="${DATABASE_URL:-$(grep -E '^DATABASE_URL=' "$ROOT/.env.example" | cut -d= -f2-)}"
 mkdir -p "$LOGS"
 
 log()  { printf '\033[1;34m[pipeline %s]\033[0m %s\n' "$(date +%H:%M:%S)" "$*" >&2; }
