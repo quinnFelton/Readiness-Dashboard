@@ -7,6 +7,7 @@ import { closePool, getPool } from '../../users/pool';
 import { createAdapterRegistry } from '@rd/provider-adapters';
 import { OuraAdapter, ouraConfigFromEnv } from './register';
 import { syncOuraAll, syncOuraUser } from './sync-job';
+import { acquireOuraTestMutex } from './test-mutex';
 
 const pool = getPool();
 const cipher = new LocalAesGcmCipher(randomBytes(32).toString('base64'));
@@ -32,7 +33,9 @@ describe('oura sync job: lock, isolation, logging', () => {
   const deps = { pool, cipher, adapter, now: () => now };
   const users: string[] = [];
 
+  let releaseMutex: () => Promise<void>;
   beforeAll(async () => {
+    releaseMutex = await acquireOuraTestMutex(pool);
     const registry = createAdapterRegistry();
     registry.register(adapter);
     const conns = new ConnectionService(
@@ -55,6 +58,7 @@ describe('oura sync job: lock, isolation, logging', () => {
   });
   afterAll(async () => {
     for (const u of users) await pool.query('DELETE FROM users WHERE id = $1', [u]);
+    await releaseMutex();
     await closePool();
   });
 

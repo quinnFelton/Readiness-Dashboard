@@ -8,11 +8,12 @@ import { type TokenCipher, createTokenCipher } from '../../crypto/token-cipher';
 import { SyncService } from '../../sync/sync-service';
 import type { SyncResult } from '../../sync/sync-service';
 import { getPool } from '../../users/pool';
+import { withOuraUserLock } from './lock';
 import { OuraAdapter, ouraConfigFromEnv } from './register';
 
-// PLAN §5.1/§13: scheduled (EventBridge) incremental pull. Oura webhooks were NOT adopted (see the
-// phase report): their API could not be verified from the docs available, and signature checks must
-// not be written from memory (CLAUDE.md rules 7/8). Polling remains the sync model.
+// PLAN §5.1/§13: scheduled (EventBridge) incremental pull. Oura webhooks (./webhook.ts) are the primary
+// real-time path (PLAN §14 re-check; Oura's docs recommend them); this job is the fallback/backfill that
+// also covers missed deliveries and the first sync after connecting.
 
 const PROVIDER = 'oura';
 
@@ -40,16 +41,7 @@ interface ConnRow {
 export async function syncOuraUser(userId: string, deps: OuraSyncDeps): Promise<SyncResult> {
   const base = { provider: PROVIDER, dailyMetrics: 0, activityEfforts: 0 };
   const now = deps.now ?? (() => new Date());
-  const lockClient = await deps.pool.connect();
-  let locked = false;
-  try {
-    const lock = await lockClient.query<{ ok: boolean }>(
-      `SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS ok`,
-      [`oura-sync:${userId}`],
-    );
-    locked = lock.rows[0]?.ok === true;
-    if (!locked) return { ...base, ok: false, error: 'SyncInProgress' };
-
+  const locked = await withOuraUserLock(deps.pool, userId, async (): Promise<SyncResult> => {
     const { rows } = await deps.pool.query<ConnRow>(
       `SELECT external_user_id, access_token_enc, refresh_token_enc, expires_at, last_synced_at
          FROM provider_connections WHERE user_id = $1 AND provider = $2 AND is_active`,
@@ -94,17 +86,12 @@ export async function syncOuraUser(userId: string, deps: OuraSyncDeps): Promise<
       // Name only: messages/objects could embed payload fragments (rule 6).
       return { ...base, ok: false, error: err instanceof Error ? err.name : 'sync failed' };
     }
-  } finally {
-    if (locked) {
-      await lockClient
-        .query(`SELECT pg_advisory_unlock(hashtextextended($1, 0))`, [`oura-sync:${userId}`])
-        .catch(() => undefined);
-    }
-    lockClient.release();
-  }
+  });
+  return locked.acquired ? locked.value : { ...base, ok: false, error: 'SyncInProgress' };
 }
 
-async function storeTokens(deps: OuraSyncDeps, userId: string, g: ConnectionGrant) {
+/** Encrypts and persists a (possibly refreshed) grant. Caller must hold the per-user lock. */
+export async function storeTokens(deps: OuraSyncDeps, userId: string, g: ConnectionGrant) {
   const ctx = `${userId}:${PROVIDER}`;
   await deps.pool.query(
     `UPDATE provider_connections SET

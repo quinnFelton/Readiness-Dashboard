@@ -7,6 +7,7 @@ import { closePool, getPool } from '../../users/pool';
 import { createAdapterRegistry } from '@rd/provider-adapters';
 import { OuraAdapter, ouraConfigFromEnv } from './register';
 import { syncOuraUser } from './sync-job';
+import { acquireOuraTestMutex } from './test-mutex';
 
 // Needs migrated local Postgres (docker compose up -d db && pnpm db:migrate). All Oura HTTP is mocked.
 
@@ -54,7 +55,9 @@ describe('oura sync job', () => {
   const deps = { pool, cipher, adapter, now: () => now };
   let userId: string;
 
+  let releaseMutex: () => Promise<void>;
   beforeAll(async () => {
+    releaseMutex = await acquireOuraTestMutex(pool);
     const { rows } = await pool.query(`INSERT INTO users(email) VALUES ($1) RETURNING id`, [
       `oura-${randomBytes(4).toString('hex')}@test.invalid`,
     ]);
@@ -75,6 +78,7 @@ describe('oura sync job', () => {
   });
   afterAll(async () => {
     await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    await releaseMutex();
     await closePool();
   });
 

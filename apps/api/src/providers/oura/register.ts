@@ -8,7 +8,18 @@ import {
 } from '../../../../../packages/provider-adapters/src/oura';
 import { type AdapterRegistry, defaultRegistry } from '@rd/provider-adapters';
 
-export { OuraAdapter, ouraConfigFromEnv, type OuraConfig };
+export {
+  OURA_COLLECTION_METRICS,
+  OuraAdapter,
+  OuraSubscriptions,
+  answerVerification,
+  ouraConfigFromEnv,
+  ouraSignature,
+  parseOuraWebhookEvent,
+  verifyOuraSignature,
+  type OuraConfig,
+  type OuraWebhookEvent,
+} from '../../../../../packages/provider-adapters/src/oura';
 
 /** Registers Oura into a registry. App startup calls this; shared code never names the provider. */
 export function registerOura(
