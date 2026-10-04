@@ -1,13 +1,16 @@
 # Phase 1 test report — Auth & user model
 
-**passed: false** — the new and existing tests were never executed.
+**passed: false** — DB-backed tests could not run, so the route-level 401/403/200 requirements are unverified.
 
-## Environment blockers
-- `pnpm` is not on PATH (`command not found`), and the worktree has no `node_modules`.
-- The sandbox denied `npx pnpm`, and denied compound shell commands.
-- I could not run `pnpm typecheck`, `pnpm lint` or `pnpm test`. I also could not start Postgres.
-- The tests I wrote have never been compiled or run. Treat them as unverified until someone runs `pnpm install && pnpm typecheck && pnpm lint && pnpm test`.
-- The builder's `apps/api/src/users/users.test.ts` needs a migrated local Postgres (`docker compose up -d db && pnpm db:migrate`). It will fail without one.
+## Latest run (this pass)
+- `pnpm typecheck`: pass. `pnpm lint` (eslint and prettier): pass.
+- `pnpm test`: 5 files pass (38 tests). `apps/api/src/users/users.test.ts` fails in `beforeAll`, so its 15 other tests are skipped.
+  - Error: `relation "users" does not exist` at `src/users/service.ts:55`, reached from `runSeed` (`db/seed/seed.ts:9`).
+  - Cause: a Postgres is reachable at the default `localhost:5432/readiness`, but the Phase 1 migration has not been applied.
+- I tried to apply the migration. `pnpm db:migrate` failed because `DATABASE_URL` is unset. The retry with `DATABASE_URL` set was denied by the sandbox, which has no approval surface. I did not retry.
+- To finish: run `DATABASE_URL=postgres://rd:rd@localhost:5432/readiness pnpm db:migrate && pnpm test`. This is an environment gap, not a known product bug.
+- Not run, because of this: `/users/me`, `/users`, the `requireSelfOrMaster` probe, login and seed idempotency.
+- The DB-free `rbac.test.ts` (UserService mocked) and `token.test.ts` do pass. They cover the 401/403/200 logic in isolation.
 
 ## Spec coverage
 | Requirement | Test | Status |
@@ -29,7 +32,6 @@
 1. **Spec deviation: sessions are not Postgres-backed.** The phase asks for "NextAuth with Postgres-backed sessions". `apps/web/src/lib/auth/config.ts:20` sets `session: { strategy: 'jwt' }` and uses no DB adapter. The file comment justifies this (edge middleware reads the role without a DB call). Users are stored in Postgres, but sessions are not. This is a requirement left unmet, so `passed` stays false. A reviewer should decide whether to accept the deviation or add an adapter.
    - Also: `middleware.ts` still has no test, and a revoked or demoted user's web session role stays stale for up to 8 hours. This only affects the UI redirect, because the API re-reads the role from the DB.
 
-(Re-check this run: the environment still has no `pnpm` and no `node_modules`, and installing was denied. No tests were executed in this pass either.)
 2. **Dev login is not constant-time on the lookup.** `/auth/login` does a DB lookup and then a constant-time password compare. Timing could reveal whether an email exists. This is minor and dev-only.
 3. **The 401 branch in `requireUser` is only reached through the DB mock.** `rbac.test.ts` covers it, but it hasn't been run.
 4. **`middleware.ts` carries a note that Next 16 may prefer `proxy.ts`.** Whether `/admin` is actually blocked depends on this. It needs an e2e or integration check (phase 7).
