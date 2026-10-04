@@ -1,29 +1,65 @@
 {
-  "_note": "HAND-WRITTEN from memory of the Oura v2 shape, NOT recorded from the live API. Re-record once field names are verified against https://cloud.ouraring.com/v2/docs.",
+  "_note": "Shaped after Oura OpenAPI spec 1.41 schemas (PublicDailyReadiness, PublicDailySleep, PublicModifiedSleepModel): https://cloud.ouraring.com/v2/static/json/openapi-1.41.json. Values are synthetic. The bad-date, null-score and deleted-period items are deliberate edge cases.",
   "dailyReadiness": [
-    { "id": "r1", "day": "2026-09-01", "score": 82, "temperature_deviation": 0.1 },
-    { "id": "r2", "day": "2026-09-02", "score": null }
+    {
+      "id": "r1",
+      "contributors": { "activity_balance": 80, "hrv_balance": 85, "resting_heart_rate": 90 },
+      "day": "2026-09-01",
+      "score": 82,
+      "temperature_deviation": 0.1,
+      "temperature_trend_deviation": null,
+      "timestamp": "2026-09-01T00:00:00+00:00"
+    },
+    {
+      "id": "r2",
+      "contributors": {},
+      "day": "2026-09-02",
+      "score": null,
+      "timestamp": "2026-09-02T00:00:00+00:00"
+    }
   ],
   "dailySleep": [
-    { "id": "s1", "day": "2026-09-01", "score": 77 },
-    { "id": "s2", "day": "bad-date", "score": 50 }
+    {
+      "id": "s1",
+      "contributors": { "deep_sleep": 70, "total_sleep": 80 },
+      "day": "2026-09-01",
+      "score": 77,
+      "timestamp": "2026-09-01T00:00:00+00:00"
+    },
+    {
+      "id": "s2",
+      "contributors": {},
+      "day": "bad-date",
+      "score": 50,
+      "timestamp": "2026-09-02T00:00:00+00:00"
+    }
   ],
   "sleep": [
     {
       "id": "p1",
       "day": "2026-09-01",
-      "type": "nap",
+      "type": "late_nap",
       "average_hrv": 20,
       "lowest_heart_rate": 70,
-      "total_sleep_duration": 1800
+      "total_sleep_duration": 1800,
+      "bedtime_start": "2026-09-01T14:00:00+00:00",
+      "bedtime_end": "2026-09-01T14:35:00+00:00",
+      "low_battery_alert": false,
+      "period": 1,
+      "time_in_bed": 2100
     },
     {
       "id": "p2",
       "day": "2026-09-01",
       "type": "long_sleep",
-      "average_hrv": 54.5,
+      "average_hrv": 54,
       "lowest_heart_rate": 48,
-      "total_sleep_duration": 27000
+      "total_sleep_duration": 27000,
+      "bedtime_start": "2026-08-31T22:30:00+00:00",
+      "bedtime_end": "2026-09-01T06:30:00+00:00",
+      "low_battery_alert": false,
+      "period": 0,
+      "time_in_bed": 28800
     },
     {
       "id": "p3",
@@ -31,7 +67,25 @@
       "type": "long_sleep",
       "average_hrv": null,
       "lowest_heart_rate": 50,
-      "total_sleep_duration": 25000
+      "total_sleep_duration": 25000,
+      "bedtime_start": "2026-09-01T23:00:00+00:00",
+      "bedtime_end": "2026-09-02T06:30:00+00:00",
+      "low_battery_alert": false,
+      "period": 0,
+      "time_in_bed": 27000
+    },
+    {
+      "id": "p4",
+      "day": "2026-09-03",
+      "type": "deleted",
+      "average_hrv": 99,
+      "lowest_heart_rate": 30,
+      "total_sleep_duration": 30000,
+      "bedtime_start": "2026-09-02T23:00:00+00:00",
+      "bedtime_end": "2026-09-03T07:00:00+00:00",
+      "low_battery_alert": false,
+      "period": 0,
+      "time_in_bed": 30000
     }
   ]
 }

@@ -42,7 +42,9 @@ describe('normalize', () => {
     const k = (d: string, m: string) => out.find((r) => r.date === d && r.metricType === m)?.value;
     expect(k('2026-09-01', 'readiness')).toBe(82);
     expect(k('2026-09-01', 'sleep_score')).toBe(77);
-    expect(k('2026-09-01', 'hrv')).toBe(54.5);
+    expect(k('2026-09-01', 'hrv')).toBe(54);
+    // PublicSleepType 'deleted' periods never produce metrics (2026-09-03 only has a deleted period)
+    expect(out.some((r) => r.date === '2026-09-03')).toBe(false);
     expect(k('2026-09-01', 'resting_hr')).toBe(48);
     expect(k('2026-09-02', 'resting_hr')).toBe(50);
     expect(k('2026-09-02', 'hrv')).toBeUndefined();

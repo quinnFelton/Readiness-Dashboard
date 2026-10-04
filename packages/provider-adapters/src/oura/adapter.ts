@@ -10,7 +10,13 @@ import type {
   StartResult,
 } from '../types';
 import { type OuraConfig, SANDBOX_ACCESS_TOKEN, SANDBOX_CODE } from './config';
-import { OURA_DERIVATION_VERSION, type OuraRawBundle, normalizeOura } from './mapping';
+import {
+  OURA_COLLECTIONS,
+  OURA_DERIVATION_VERSION,
+  type OuraCollection,
+  type OuraRawBundle,
+  normalizeOura,
+} from './mapping';
 
 // Error classes carry status/codes only — never response bodies, which could hold health data (rule 6).
 export class OuraAuthError extends Error {
@@ -40,8 +46,9 @@ const fmtDay = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
  * Incremental window (PLAN §13). `since` = last successful sync; we back up `overlapDays` because Oura
- * finalizes a day late, and rely on idempotent upserts. end_date is tomorrow (UTC) so today's data is
- * included regardless of whether the API treats end_date as exclusive (UNVERIFIED semantics).
+ * finalizes a day late, and rely on idempotent upserts. Query params start_date/end_date (date | date-time)
+ * are verified (spec 1.41, GET /v2/usercollection/*); the spec does not say whether end_date is inclusive,
+ * so end_date is tomorrow (UTC) to include today's data either way.
  */
 export function computeOuraRange(
   since: Date | null,
@@ -110,7 +117,9 @@ export class OuraAdapter implements ProviderAdapter<NormalizedDailyMetric> {
       code,
       redirect_uri: this.cfg.redirectUri,
     });
-    // Best-effort identity; needs the personal scope (UNVERIFIED path: /v2/usercollection/personal_info).
+    // Best-effort identity; needs the `personal` scope. Path verified (spec overview quick start:
+    // GET /v2/usercollection/personal_info). The response `id` is what webhook events carry as user_id —
+    // the PublicPersonalInfo schema was not in the spec excerpt, so this is the one unconfirmed field.
     try {
       const info = (await this.apiGet(grant.accessToken!, '/v2/usercollection/personal_info')) as {
         id?: unknown;
@@ -123,6 +132,18 @@ export class OuraAdapter implements ProviderAdapter<NormalizedDailyMetric> {
   }
 
   async fetchRaw(ctx: FetchContext): Promise<FetchResult> {
+    return this.fetchWindow(ctx, computeOuraRange(ctx.since, this.now, this.cfg));
+  }
+
+  /**
+   * Fetch an explicit date window, optionally restricted to some collections (webhook-triggered refresh).
+   * Collections not requested come back as empty arrays. Shares token refresh / 401 retry with fetchRaw.
+   */
+  async fetchWindow(
+    ctx: FetchContext,
+    range: { startDate: string; endDate: string },
+    collections: readonly OuraCollection[] = OURA_COLLECTIONS,
+  ): Promise<FetchResult> {
     let accessToken = ctx.accessToken;
     let refreshedGrant: ConnectionGrant | undefined;
     const refresh = async () => {
@@ -139,11 +160,12 @@ export class OuraAdapter implements ProviderAdapter<NormalizedDailyMetric> {
             ctx.expiresAt.getTime() - this.cfg.refreshSkewSec * 1000 <= this.now.getTime());
         if (expired) await refresh();
       }
-      const range = computeOuraRange(ctx.since, this.now, this.cfg);
-      const collect = async () => ({
-        dailyReadiness: await this.paged(accessToken!, 'daily_readiness', range),
-        dailySleep: await this.paged(accessToken!, 'daily_sleep', range),
-        sleep: await this.paged(accessToken!, 'sleep', range),
+      const want = (c: OuraCollection, token: string) =>
+        collections.includes(c) ? this.paged(token, c, range) : Promise.resolve([]);
+      const collect = async (): Promise<OuraRawBundle> => ({
+        dailyReadiness: await want('daily_readiness', accessToken!),
+        dailySleep: await want('daily_sleep', accessToken!),
+        sleep: await want('sleep', accessToken!),
       });
       let raw: OuraRawBundle;
       try {
@@ -200,7 +222,10 @@ export class OuraAdapter implements ProviderAdapter<NormalizedDailyMetric> {
     };
   }
 
-  /** Follows next_token pagination (UNVERIFIED param/response names: start_date, end_date, next_token, data). */
+  /**
+   * Follows next_token pagination. Verified (spec 1.41): query params start_date, end_date, next_token;
+   * response MultiDocumentResponse_*_ = { data: [...], next_token: string | null }.
+   */
   private async paged(
     token: string,
     collection: string,
@@ -224,9 +249,11 @@ export class OuraAdapter implements ProviderAdapter<NormalizedDailyMetric> {
   }
 
   /**
-   * GET with rate-limit handling. Oura's limits/headers could not be machine-verified; we honor the standard
-   * `Retry-After` on 429 (wait if short, else fail fast so the next scheduled run retries). With three
-   * requests per user per run we are far below any plausible limit, so no proactive throttle is added.
+   * GET with rate-limit handling. Spec overview "Rate Limit Response Headers": a 429 carries `Retry-After`
+   * (integer seconds, safe to use directly), X-RateLimit-Limit/-Window/-Reset/-Tier. Headers are only sent on
+   * 429, so there is nothing to read proactively; we wait out a short Retry-After, else fail fast so the next
+   * scheduled run retries. 403 means the user's Oura subscription lapsed (surfaced as OuraHttpError(403)).
+   * Three requests per user per run (and webhooks for ongoing updates) stay far below the limits.
    */
   private async apiGet(token: string, path: string): Promise<unknown> {
     for (let attempt = 0; ; attempt++) {
