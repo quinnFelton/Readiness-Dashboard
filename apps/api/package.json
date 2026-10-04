@@ -1,0 +1,28 @@
+{
+  "name": "@rd/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "db:migrate": "node-pg-migrate up --migrations-dir db/migrations --migration-file-language sql --envPath ../../.env",
+    "db:migrate:down": "node-pg-migrate down --migrations-dir db/migrations --migration-file-language sql --envPath ../../.env",
+    "db:migrate:create": "node-pg-migrate create --migrations-dir db/migrations --migration-file-language sql"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "pg": "^8.23.1",
+    "serverless-http": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/supertest": "^7.2.1",
+    "dotenv": "^18.0.5",
+    "node-pg-migrate": "^9.0.0",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15"
+  }
+}

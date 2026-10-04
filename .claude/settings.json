@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(pnpm *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vitest *)",
+      "Bash(npx playwright *)",
+      "Bash(npx prettier *)",
+      "Bash(npx eslint *)",
+      "Bash(npx cdk synth*)",
+      "Bash(npx cdk diff*)",
+      "Bash(npx node-pg-migrate *)",
+      "Bash(docker compose *)",
+      "Bash(node *)",
+      "Bash(git status*)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git fetch *)",
+      "Bash(git merge *)",
+      "Bash(git rev-parse *)",
+      "Bash(git branch *)",
+      "Bash(git push -u origin phase-*)",
+      "Bash(git push origin phase-*)",
+      "Bash(git push -u origin integration/*)",
+      "Bash(git push origin integration/*)",
+      "WebFetch(domain:docs.tryterra.co)",
+      "WebFetch(domain:tryterra.co)",
+      "WebFetch(domain:cloud.ouraring.com)",
+      "WebFetch(domain:developers.strava.com)",
+      "WebFetch(domain:docs.aws.amazon.com)",
+      "WebFetch(domain:nextjs.org)",
+      "WebFetch(domain:next-auth.js.org)",
+      "WebFetch(domain:authjs.dev)",
+      "WebFetch(domain:playwright.dev)",
+      "WebFetch(domain:recharts.org)",
+      "Workflow"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push origin main*)",
+      "Bash(git push origin HEAD:main*)",
+      "Bash(git reset --hard*)",
+      "Bash(npx cdk deploy*)",
+      "Bash(cdk deploy*)",
+      "Bash(npx cdk destroy*)",
+      "Bash(aws *)",
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.production)"
+    ]
+  },
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "2"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-bash.sh" }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-files.sh" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-file.sh" }
+        ]
+      }
+    ]
+  }
+}

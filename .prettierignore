@@ -1,0 +1,17 @@
+pnpm-lock.yaml
+node_modules
+.next
+dist
+coverage
+cdk.out
+playwright-report
+test-results
+pipeline/logs
+next-env.d.ts
+# Human-maintained kit docs/specs — don't reformat
+PLAN.md
+SETUP.md
+CLAUDE.md
+docs/
+pipeline/
+.claude/
