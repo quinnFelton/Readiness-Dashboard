@@ -132,7 +132,14 @@ export function stravaWebhookRouter(deps: StravaWebhookDeps): Router {
       );
       // Answer inside Strava's 2 s window; if work overruns, the row stays 'pending' and replay
       // (StravaEventReplayer) picks it up if the runtime drops the in-flight promise.
-      await Promise.race([work, new Promise<void>((resolve) => setTimeout(resolve, budget))]);
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        work,
+        new Promise<void>((resolve) => {
+          timer = setTimeout(resolve, budget);
+        }),
+      ]);
+      clearTimeout(timer);
     }
     res.status(200).json({ received: true });
   });
