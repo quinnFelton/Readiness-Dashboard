@@ -14,7 +14,13 @@ interface UserRow {
 const COLUMNS = 'id, email, name, role, created_at';
 
 function toUser(r: UserRow): User {
-  return { id: r.id, email: r.email, name: r.name, role: r.role, createdAt: r.created_at.toISOString() };
+  return {
+    id: r.id,
+    email: r.email,
+    name: r.name,
+    role: r.role,
+    createdAt: r.created_at.toISOString(),
+  };
 }
 
 export class UserService {
@@ -23,7 +29,9 @@ export class UserService {
   async getById(id: string): Promise<User | null> {
     // Non-UUID subjects can never match; avoid a cast error from Postgres.
     if (!UUID_RE.test(id)) return null;
-    const { rows } = await this.pool.query<UserRow>(`SELECT ${COLUMNS} FROM users WHERE id = $1`, [id]);
+    const { rows } = await this.pool.query<UserRow>(`SELECT ${COLUMNS} FROM users WHERE id = $1`, [
+      id,
+    ]);
     return rows[0] ? toUser(rows[0]) : null;
   }
 

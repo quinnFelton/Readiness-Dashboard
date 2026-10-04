@@ -25,7 +25,11 @@ function bearer(req: Request): string | null {
 }
 
 /** 401 unless a valid web-minted token maps to an existing user. */
-export const requireUser: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+export const requireUser: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   try {
     const token = bearer(req);
     const claims = token ? verifyApiToken(token, { nowSec: Math.floor(Date.now() / 1000) }) : null;

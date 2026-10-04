@@ -58,7 +58,9 @@ export function verifyApiToken(
     const given = Buffer.from(sig, 'base64url');
     if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
 
-    const c = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as Partial<ApiTokenClaims>;
+    const c = JSON.parse(
+      Buffer.from(body, 'base64url').toString('utf8'),
+    ) as Partial<ApiTokenClaims>;
     if (c.iss !== TOKEN_ISSUER || c.aud !== TOKEN_AUDIENCE) return null;
     if (typeof c.sub !== 'string' || typeof c.exp !== 'number' || typeof c.iat !== 'number') {
       return null;

@@ -18,14 +18,15 @@
 
 ## Middleware
 
-| Middleware | Behavior |
-|---|---|
-| `requireUser` | 401 unless valid token + existing user |
-| `requireMaster` | after `requireUser`; 403 unless `role = master` |
+| Middleware                   | Behavior                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `requireUser`                | 401 unless valid token + existing user                                                                                   |
+| `requireMaster`              | after `requireUser`; 403 unless `role = master`                                                                          |
 | `requireSelfOrMaster(param)` | after `requireUser`; master any, user only if `req.params[param] === req.user.id`, else 403 (missing param fails closed) |
 
 Every route must compose these explicitly, e.g.
 `router.get('/:userId', requireUser, requireSelfOrMaster('userId'), handler)`.
 
 ## Env
+
 `NEXTAUTH_SECRET` (shared by web + api), `AUTH_DEV_PASSWORD` (dev only), `DATABASE_URL`.

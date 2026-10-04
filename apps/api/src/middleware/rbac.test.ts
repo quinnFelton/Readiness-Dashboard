@@ -4,7 +4,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { signApiToken } from '../auth/token';
 
 // DB-free RBAC tests: UserService is mocked so these run without Postgres.
-const users = new Map<string, { id: string; email: string; name: null; role: 'user' | 'master'; createdAt: string }>();
+const users = new Map<
+  string,
+  { id: string; email: string; name: null; role: 'user' | 'master'; createdAt: string }
+>();
 vi.mock('../users/pool', () => ({ getPool: () => ({}) }));
 vi.mock('../users/service', () => ({
   UserService: class {
@@ -28,8 +31,12 @@ const bearer = (id: string, role: 'user' | 'master' = 'user') =>
 const app = express();
 app.get('/me', requireUser, (req, res) => res.json({ id: req.user?.id }));
 app.get('/admin', requireUser, requireMaster, (_req, res) => res.json({ ok: true }));
-app.get('/things/:userId', requireUser, requireSelfOrMaster('userId'), (_req, res) => res.json({ ok: true }));
-app.get('/noparam', requireUser, requireSelfOrMaster('userId'), (_req, res) => res.json({ ok: true }));
+app.get('/things/:userId', requireUser, requireSelfOrMaster('userId'), (_req, res) =>
+  res.json({ ok: true }),
+);
+app.get('/noparam', requireUser, requireSelfOrMaster('userId'), (_req, res) =>
+  res.json({ ok: true }),
+);
 app.get('/nouser', requireMaster, (_req, res) => res.json({ ok: true }));
 
 beforeEach(() => {
@@ -43,9 +50,12 @@ describe('requireUser', () => {
   it('401 with no header', async () => {
     expect((await request(app).get('/me')).status).toBe(401);
   });
-  it.each(['Basic abc', 'Bearer', 'Bearer a b', 'bearer'])('401 for malformed header %s', async (h) => {
-    expect((await request(app).get('/me').set('Authorization', h)).status).toBe(401);
-  });
+  it.each(['Basic abc', 'Bearer', 'Bearer a b', 'bearer'])(
+    '401 for malformed header %s',
+    async (h) => {
+      expect((await request(app).get('/me').set('Authorization', h)).status).toBe(401);
+    },
+  );
   it('accepts lowercase scheme', async () => {
     const t = bearer(A).replace('Bearer', 'bearer');
     expect((await request(app).get('/me').set('Authorization', t)).status).toBe(200);
@@ -66,7 +76,9 @@ describe('requireUser', () => {
     ).toString('base64url');
     const good = signApiToken({ userId: A, role: 'user' }, { nowSec: now() });
     const [h, , s] = good.split('.');
-    const res = await request(app).get('/me').set('Authorization', `Bearer ${h}.${forgedBody}.${s}`);
+    const res = await request(app)
+      .get('/me')
+      .set('Authorization', `Bearer ${h}.${forgedBody}.${s}`);
     expect(res.status).toBe(401);
   });
 });
@@ -75,10 +87,14 @@ describe('requireMaster', () => {
   it('401 unauthenticated, 403 user, 200 master', async () => {
     expect((await request(app).get('/admin')).status).toBe(401);
     expect((await request(app).get('/admin').set('Authorization', bearer(A))).status).toBe(403);
-    expect((await request(app).get('/admin').set('Authorization', bearer(M, 'master'))).status).toBe(200);
+    expect(
+      (await request(app).get('/admin').set('Authorization', bearer(M, 'master'))).status,
+    ).toBe(200);
   });
   it('role comes from DB: master claim in token for a plain user is 403', async () => {
-    expect((await request(app).get('/admin').set('Authorization', bearer(A, 'master'))).status).toBe(403);
+    expect(
+      (await request(app).get('/admin').set('Authorization', bearer(A, 'master'))).status,
+    ).toBe(403);
   });
   it('role comes from DB: demoted master loses access', async () => {
     const h = bearer(M, 'master');
@@ -95,12 +111,20 @@ describe('requireSelfOrMaster', () => {
     expect((await request(app).get(`/things/${A}`)).status).toBe(401);
   });
   it('self 200, other 403, master 200', async () => {
-    expect((await request(app).get(`/things/${A}`).set('Authorization', bearer(A))).status).toBe(200);
-    expect((await request(app).get(`/things/${B}`).set('Authorization', bearer(A))).status).toBe(403);
-    expect((await request(app).get(`/things/${B}`).set('Authorization', bearer(M, 'master'))).status).toBe(200);
+    expect((await request(app).get(`/things/${A}`).set('Authorization', bearer(A))).status).toBe(
+      200,
+    );
+    expect((await request(app).get(`/things/${B}`).set('Authorization', bearer(A))).status).toBe(
+      403,
+    );
+    expect(
+      (await request(app).get(`/things/${B}`).set('Authorization', bearer(M, 'master'))).status,
+    ).toBe(200);
   });
   it('is case-sensitive on id (no uppercase bypass of another id)', async () => {
-    expect((await request(app).get(`/things/${B.toUpperCase()}`).set('Authorization', bearer(A))).status).toBe(403);
+    expect(
+      (await request(app).get(`/things/${B.toUpperCase()}`).set('Authorization', bearer(A))).status,
+    ).toBe(403);
   });
   it('denies a plain user when the param is missing (fail closed)', async () => {
     expect((await request(app).get('/noparam').set('Authorization', bearer(A))).status).toBe(403);
