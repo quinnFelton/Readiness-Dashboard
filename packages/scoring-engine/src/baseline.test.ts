@@ -97,7 +97,11 @@ describe('rollingBaseline', () => {
     const one = rollingBaseline([{ date: ASOF, value: 5 }], W, ASOF);
     expect(one).toMatchObject({ shortMean: 5, longMean: 5, longStdDev: null, z: null });
     // Long-window data but nothing in the short window: no z.
-    const old = rollingBaseline(dailySeries(addDays(ASOF, -10), 10, () => 5), W, ASOF);
+    const old = rollingBaseline(
+      dailySeries(addDays(ASOF, -10), 10, () => 5),
+      W,
+      ASOF,
+    );
     expect(old).toMatchObject({ shortMean: null, longCount: 10, z: null });
     // Exclusive mode with only short-window points: no long baseline.
     const shortOnly = rollingBaseline(
@@ -110,7 +114,11 @@ describe('rollingBaseline', () => {
 
   it('treats a perfectly flat baseline matched by the short window as z = 0', () => {
     // 0.1 is inexact in binary, so the std dev is float noise rather than exactly 0.
-    const b = rollingBaseline(dailySeries(ASOF, 28, () => 0.1), W, ASOF);
+    const b = rollingBaseline(
+      dailySeries(ASOF, 28, () => 0.1),
+      W,
+      ASOF,
+    );
     expect(b.z).toBe(0);
   });
 

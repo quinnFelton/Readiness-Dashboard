@@ -33,11 +33,7 @@ describe('deriveActivityEffort', () => {
   });
 
   it('isolates a threshold effort in junk miles, HR from that window (fixture 2)', () => {
-    const s = segments([
-      ...junk(900, 125),
-      { sec: 1200, watts: 300, hr: 165 },
-      ...junk(1500, 130),
-    ]);
+    const s = segments([...junk(900, 125), { sec: 1200, watts: 300, hr: 165 }, ...junk(1500, 130)]);
     const e = qualifying(deriveActivityEffort(s));
     expect(e.peak20Power).toBe(300);
     expect(e.peak20AvgHr).toBe(165);
