@@ -1,0 +1,1265 @@
+{
+ "source": "https://cloud.ouraring.com/v2/static/json/openapi-1.41.json (rendered at https://cloud.ouraring.com/v2/docs), fetched 2026-10-04",
+ "info": {
+  "title": "Oura API Documentation",
+  "version": "2.0"
+ },
+ "servers": [
+  {
+   "url": "https://api.ouraring.com",
+   "description": "Oura API"
+  }
+ ],
+ "securitySchemes": {
+  "BearerAuth": {
+   "type": "http",
+   "scheme": "bearer"
+  },
+  "OAuth2": {
+   "type": "oauth2",
+   "flows": {
+    "authorizationCode": {
+     "authorizationUrl": "https://cloud.ouraring.com/oauth/authorize",
+     "tokenUrl": "https://api.ouraring.com/oauth/token",
+     "scopes": {
+      "email": "Email address of the user",
+      "personal": "Personal information (gender, age, height, weight)",
+      "daily": "Daily summaries of sleep, activity and readiness",
+      "heartrate": "Time series heart rate for users",
+      "workout": "Summaries for auto-detected and user entered workouts",
+      "tag": "User entered tags",
+      "session": "Guided and unguided sessions in the Oura app",
+      "spo2": "SpO2 Average recorded during sleep",
+      "heart_health": "Heart health data"
+     }
+    }
+   }
+  },
+  "ClientIdAuth": {
+   "type": "apiKey",
+   "in": "header",
+   "name": "x-client-id",
+   "description": "Client ID for webhook subscription endpoints. Must be used together with x-client-secret header."
+  },
+  "ClientSecretAuth": {
+   "type": "apiKey",
+   "in": "header",
+   "name": "x-client-secret",
+   "description": "Client Secret for webhook subscription endpoints. Must be used together with x-client-id header."
+  }
+ },
+ "operations": {
+  "GET /v2/usercollection/daily_readiness": {
+   "summary": "Multiple Daily Readiness Documents",
+   "parameters": [
+    {
+     "name": "start_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "end_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "next_token",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "fields",
+     "in": "query",
+     "required": false,
+     "description": "Comma-separated list of fields to include in the response, in addition to the always returned fields. Defaults to all fields if not provided.",
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Comma-separated list of fields to include in the response, in addition to the always returned fields. Defaults to all fields if not provided."
+     }
+    }
+   ],
+   "responses": {
+    "200": "Successful Response",
+    "400": "Client Exception",
+    "401": "Unauthorized access exception. Usually means the access token is expired, malformed or revoked.",
+    "403": "Access forbidden. Usually means the user's subscription to Oura has expired and their data is not available via the API.",
+    "429": "Request Rate Limit Exceeded.",
+    "422": "Validation Error"
+   }
+  },
+  "GET /v2/usercollection/daily_sleep": {
+   "summary": "Multiple Daily Sleep Documents",
+   "parameters": [
+    {
+     "name": "start_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "end_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "next_token",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "fields",
+     "in": "query",
+     "required": false,
+     "description": "Comma-separated list of fields to include in the response, in addition to the always returned fields. Defaults to all fields if not provided.",
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Comma-separated list of fields to include in the response, in addition to the always returned fields. Defaults to all fields if not provided."
+     }
+    }
+   ],
+   "responses": {
+    "200": "Successful Response",
+    "400": "Client Exception",
+    "401": "Unauthorized access exception. Usually means the access token is expired, malformed or revoked.",
+    "403": "Access forbidden. Usually means the user's subscription to Oura has expired and their data is not available via the API.",
+    "429": "Request Rate Limit Exceeded.",
+    "422": "Validation Error"
+   }
+  },
+  "GET /v2/usercollection/sleep": {
+   "summary": "Multiple Sleep Documents",
+   "parameters": [
+    {
+     "name": "start_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "end_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "next_token",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "fields",
+     "in": "query",
+     "required": false,
+     "description": "Comma-separated list of fields to include in the response, in addition to the always returned fields. Defaults to all fields if not provided.",
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "Comma-separated list of fields to include in the response, in addition to the always returned fields. Defaults to all fields if not provided."
+     }
+    }
+   ],
+   "responses": {
+    "200": "Successful Response",
+    "400": "Client Exception",
+    "401": "Unauthorized access exception. Usually means the access token is expired, malformed or revoked.",
+    "403": "Access forbidden. Usually means the user's subscription to Oura has expired and their data is not available via the API.",
+    "429": "Request Rate Limit Exceeded.",
+    "422": "Validation Error"
+   }
+  },
+  "GET /v2/sandbox/usercollection/daily_readiness": {
+   "summary": "Sandbox - Multiple Daily Readiness Documents",
+   "parameters": [
+    {
+     "name": "start_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "end_date",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "string",
+        "format": "date"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    },
+    {
+     "name": "next_token",
+     "in": "query",
+     "required": false,
+     "schema": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     }
+    }
+   ],
+   "responses": {
+    "200": "Successful Response",
+    "400": "Client Exception",
+    "401": "Unauthorized access exception. Usually means the access token is expired, malformed or revoked.",
+    "403": "Access forbidden. Usually means the user's subscription to Oura has expired and their data is not available via the API.",
+    "429": "Request Rate Limit Exceeded.",
+    "422": "Validation Error"
+   }
+  },
+  "GET /v2/webhook/subscription": {
+   "summary": "List Webhook Subscriptions",
+   "parameters": [],
+   "responses": {
+    "200": "Successful Response"
+   }
+  },
+  "POST /v2/webhook/subscription": {
+   "summary": "Create Webhook Subscription",
+   "parameters": [],
+   "requestBody": {
+    "$ref": "#/components/schemas/CreateWebhookSubscriptionRequest"
+   },
+   "responses": {
+    "201": "Successful Response",
+    "422": "Validation Error"
+   }
+  },
+  "PUT /v2/webhook/subscription/{id}": {
+   "summary": "Update Webhook Subscription",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "schema": {
+      "type": "string"
+     }
+    }
+   ],
+   "requestBody": {
+    "$ref": "#/components/schemas/UpdateWebhookSubscriptionRequest"
+   },
+   "responses": {
+    "200": "Successful Response",
+    "403": "Webhook with specified id does not exist.",
+    "422": "Validation Error"
+   }
+  },
+  "DELETE /v2/webhook/subscription/{id}": {
+   "summary": "Delete Webhook Subscription",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "schema": {
+      "type": "string"
+     }
+    }
+   ],
+   "responses": {
+    "204": "Successful Response",
+    "403": "Webhook with specified id does not exist.",
+    "422": "Validation Error"
+   }
+  },
+  "PUT /v2/webhook/subscription/renew/{id}": {
+   "summary": "Renew Webhook Subscription",
+   "parameters": [
+    {
+     "name": "id",
+     "in": "path",
+     "required": true,
+     "schema": {
+      "type": "string"
+     }
+    }
+   ],
+   "responses": {
+    "200": "Successful Response",
+    "403": "Webhook with specified id does not exist.",
+    "422": "Validation Error"
+   }
+  }
+ },
+ "schemas": {
+  "MultiDocumentResponse_PublicDailyReadiness_": {
+   "properties": {
+    "data": {
+     "items": {
+      "$ref": "#/components/schemas/PublicDailyReadiness"
+     },
+     "type": "array"
+    },
+    "next_token": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "data",
+    "next_token"
+   ]
+  },
+  "PublicDailyReadiness": {
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Unique identifier of the object."
+    },
+    "contributors": {
+     "$ref": "#/components/schemas/PublicReadinessContributors",
+     "description": "Contributors of the daily readiness score."
+    },
+    "day": {
+     "$ref": "#/components/schemas/ISODate",
+     "description": "Day that the daily readiness belongs to."
+    },
+    "score": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Daily readiness score."
+    },
+    "temperature_deviation": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Temperature deviation in degrees Celsius."
+    },
+    "temperature_trend_deviation": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Temperature trend deviation in degrees Celsius."
+    },
+    "timestamp": {
+     "$ref": "#/components/schemas/LocalizedDateTime",
+     "description": "Timestamp of the daily readiness."
+    }
+   },
+   "type": "object",
+   "required": [
+    "id",
+    "contributors",
+    "day",
+    "timestamp"
+   ],
+   "description": "Public object defining daily readiness.",
+   "x-cloud-only": true,
+   "x-collection": "publicdailyreadiness",
+   "x-owner": "wellbeing-squad"
+  },
+  "PublicReadinessContributors": {
+   "properties": {
+    "activity_balance": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of cumulative activity balance in range [1, 100]."
+    },
+    "body_temperature": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of body temperature in range [1, 100]."
+    },
+    "hrv_balance": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of heart rate variability balance in range [1, 100]."
+    },
+    "previous_day_activity": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of previous day's activity in range [1, 100]."
+    },
+    "previous_night": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of previous night's sleep in range [1, 100]."
+    },
+    "recovery_index": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of recovery index in range [1, 100]."
+    },
+    "resting_heart_rate": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of resting heart rate in range [1, 100]."
+    },
+    "sleep_balance": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of sleep balance in range [1, 100]."
+    },
+    "sleep_regularity": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of sleep regularity in range [1, 100]."
+    }
+   },
+   "type": "object",
+   "description": "Object defining readiness score contributors."
+  },
+  "PublicDailySleep": {
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Unique identifier of the object."
+    },
+    "contributors": {
+     "$ref": "#/components/schemas/PublicSleepContributors",
+     "description": "Contributors for the daily sleep score."
+    },
+    "day": {
+     "$ref": "#/components/schemas/ISODate",
+     "description": "Day that the daily sleep belongs to."
+    },
+    "score": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Daily sleep score."
+    },
+    "timestamp": {
+     "$ref": "#/components/schemas/LocalizedDateTime",
+     "description": "Timestamp of the daily sleep."
+    }
+   },
+   "type": "object",
+   "required": [
+    "id",
+    "contributors",
+    "day",
+    "timestamp"
+   ],
+   "description": "Public object defining daily sleep.",
+   "x-cloud-only": true,
+   "x-collection": "publicdailysleep",
+   "x-owner": "sleep-squad"
+  },
+  "PublicSleepContributors": {
+   "properties": {
+    "deep_sleep": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of deep sleep in range [1, 100]."
+    },
+    "efficiency": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of sleep efficiency in range [1, 100]."
+    },
+    "latency": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of sleep latency in range [1, 100]."
+    },
+    "rem_sleep": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of REM sleep in range [1, 100]."
+    },
+    "restfulness": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of sleep restfulness in range [1, 100]."
+    },
+    "timing": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of sleep timing in range [1, 100]."
+    },
+    "total_sleep": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Contribution of total sleep in range [1, 100]."
+    }
+   },
+   "type": "object",
+   "description": "Object defining sleep score contributors."
+  },
+  "PublicModifiedSleepModel": {
+   "properties": {
+    "id": {
+     "type": "string",
+     "minLength": 1,
+     "description": "Unique identifier of the object."
+    },
+    "average_breath": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Average breathing rate during sleep as breaths/minute."
+    },
+    "average_heart_rate": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Average heart rate during sleep as beats/minute. NOTE: this is the average calculated by ecore (based on 30-second samples) which is different from what is shown in the app. The app shows the average of aggregated 5-minute heart rate samples."
+    },
+    "average_hrv": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Average heart rate variability during sleep."
+    },
+    "awake_time": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Duration spent awake in seconds."
+    },
+    "bedtime_end": {
+     "$ref": "#/components/schemas/LocalizedDateTime",
+     "description": "Bedtime end of the sleep."
+    },
+    "bedtime_start": {
+     "$ref": "#/components/schemas/LocalizedDateTime",
+     "description": "Bedtime start of the sleep."
+    },
+    "day": {
+     "$ref": "#/components/schemas/ISODate",
+     "description": "Day that the sleep belongs to."
+    },
+    "deep_sleep_duration": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Duration spent in deep sleep in seconds."
+    },
+    "efficiency": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Sleep efficiency rating in range [1, 100]."
+    },
+    "heart_rate": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/PublicSample"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Object containing heart rate samples."
+    },
+    "hrv": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/PublicSample"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Object containing heart rate variability samples."
+    },
+    "latency": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Sleep latency in seconds. This is the time it took for the user to fall asleep after going to bed."
+    },
+    "light_sleep_duration": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Duration spent in light sleep in seconds."
+    },
+    "low_battery_alert": {
+     "type": "boolean",
+     "description": "Flag indicating if a low battery alert occurred."
+    },
+    "lowest_heart_rate": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Lowest heart rate during sleep. NOTE: this is the value calculated by ecore (based on 30-second samples) which is different from what is shown in the app. The app shows the minimum of aggregated 5-minute heart rate samples."
+    },
+    "movement_30_sec": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "30-second movement classification for the period where every character corresponds to:\n'1' = no motion,\n'2' = restless,\n'3' = tossing and turning\n'4' = active\nExample: \"1143222134\"."
+    },
+    "period": {
+     "type": "integer",
+     "description": "ECore sleep period identifier."
+    },
+    "readiness": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/PublicReadiness"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Object containing the readiness details."
+    },
+    "readiness_score_delta": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Effect on readiness score caused by this sleep period."
+    },
+    "rem_sleep_duration": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Duration spent in REM sleep in seconds."
+    },
+    "restless_periods": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Number of restless periods during sleep."
+    },
+    "sleep_algorithm_version": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/PublicSleepAlgorithmVersion"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Version of the sleep algorithm used to calculate the sleep data."
+    },
+    "sleep_analysis_reason": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/PublicSleepAnalysisReason"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "The reason for the creation or update of the latest version of this sleep."
+    },
+    "sleep_phase_30_sec": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "30-second sleep phase classification for the period where every character corresponds to:\n'1' = deep sleep,\n'2' = light sleep,\n'3' = REM sleep\n'4' = awake.\nExample: \"444423323441114\"."
+    },
+    "sleep_phase_5_min": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "5-minute sleep phase classification for the period where every character corresponds to:\n'1' = deep sleep,\n'2' = light sleep,\n'3' = REM sleep\n'4' = awake.\nExample: \"444423323441114\"."
+    },
+    "sleep_score_delta": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Effect on sleep score caused by this sleep period."
+    },
+    "time_in_bed": {
+     "type": "integer",
+     "description": "Duration spent in bed in seconds."
+    },
+    "total_sleep_duration": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Total sleep duration in seconds."
+    },
+    "type": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/PublicSleepType"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Type of the sleep period."
+    },
+    "ring_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Encrypted identifier of the ring that produced this sleep data. Deprecated, returns null."
+    },
+    "app_sleep_phase_5_min": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "\n        5-minute sleep phase classification for the period aligned with what is shown in the app\n        where every character corresponds to:\n        '1' = deep sleep,\n        '2' = light sleep,\n        '3' = REM sleep\n        '4' = awake.\n        Example: \"444423323441114\".\n        NOTE: This field will be removed in the future after a transition period.\n        "
+    }
+   },
+   "type": "object",
+   "required": [
+    "id",
+    "bedtime_end",
+    "bedtime_start",
+    "day",
+    "low_battery_alert",
+    "period",
+    "time_in_bed"
+   ],
+   "x-cloud-only": true,
+   "x-collection": "publicsleepmodel",
+   "x-owner": "sleep-squad"
+  },
+  "PublicSleepType": {
+   "type": "string",
+   "enum": [
+    "deleted",
+    "sleep",
+    "long_sleep",
+    "late_nap",
+    "rest"
+   ],
+   "description": "Possible sleep period types.\n'deleted' = deleted sleep by user.\n'sleep' = user confirmed sleep / nap, min 15 minutes, max 3 hours, contributes to daily scores\n'late_nap' = user confirmed sleep / nap, min 15 minutes, ended after sleep day change (6 pm), contributes to next days daily scores\n'long_sleep' = sleep that is long enough (>3h) to automatically contribute to daily scores\n'rest' = Falsely detected sleep / nap, rejected in confirm prompt by user"
+  },
+  "PublicReadiness": {
+   "properties": {
+    "contributors": {
+     "$ref": "#/components/schemas/PublicReadinessContributors",
+     "description": "Contributors of the readiness score."
+    },
+    "score": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Readiness score in range [1, 100]."
+    },
+    "temperature_deviation": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Temperature deviation in degrees Celsius."
+    },
+    "temperature_trend_deviation": {
+     "anyOf": [
+      {
+       "type": "number"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "description": "Temperature trend deviation in degrees Celsius."
+    }
+   },
+   "type": "object",
+   "required": [
+    "contributors"
+   ],
+   "description": "Object defining readiness."
+  },
+  "CreateWebhookSubscriptionRequest": {
+   "properties": {
+    "callback_url": {
+     "type": "string"
+    },
+    "verification_token": {
+     "type": "string"
+    },
+    "event_type": {
+     "$ref": "#/components/schemas/WebhookOperation"
+    },
+    "data_type": {
+     "$ref": "#/components/schemas/ExtApiV2DataType"
+    }
+   },
+   "type": "object",
+   "required": [
+    "callback_url",
+    "verification_token",
+    "event_type",
+    "data_type"
+   ]
+  },
+  "UpdateWebhookSubscriptionRequest": {
+   "properties": {
+    "verification_token": {
+     "type": "string"
+    },
+    "callback_url": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "event_type": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/WebhookOperation"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    },
+    "data_type": {
+     "anyOf": [
+      {
+       "$ref": "#/components/schemas/ExtApiV2DataType"
+      },
+      {
+       "type": "null"
+      }
+     ]
+    }
+   },
+   "type": "object",
+   "required": [
+    "verification_token"
+   ]
+  },
+  "WebhookSubscriptionModel": {
+   "properties": {
+    "id": {
+     "type": "string",
+     "format": "uuid4"
+    },
+    "callback_url": {
+     "type": "string"
+    },
+    "event_type": {
+     "$ref": "#/components/schemas/WebhookOperation"
+    },
+    "data_type": {
+     "$ref": "#/components/schemas/ExtApiV2DataType"
+    },
+    "expiration_time": {
+     "type": "string",
+     "format": "date-time"
+    }
+   },
+   "type": "object",
+   "required": [
+    "id",
+    "callback_url",
+    "event_type",
+    "data_type",
+    "expiration_time"
+   ]
+  },
+  "WebhookOperation": {
+   "type": "string",
+   "enum": [
+    "create",
+    "update",
+    "delete"
+   ]
+  }
+ },
+ "webhookDocs": [
+  {
+   "tag": "Webhook Subscription Routes",
+   "description": "# Webhooks for Real-Time Data Updates\n\n## What are Webhooks?\nWebhooks are a way for the Oura API to notify your application when new data is available, instead of requiring your application to constantly check for updates (polling). Think of webhooks as \"reverse APIs\" - instead of your application requesting data, Oura's servers send data to your application when something changes.\n\n## Why Use Webhooks (Important!)\n- **RECOMMENDED APPROACH**: Webhooks are the preferred way to consume Oura data\n- **Avoid Rate Limits**: We have not had customers hit rate limits with webhooks properly implemented\n- **Near Real-Time Updates**: Webhook notifications come approximately 30 seconds after data syncs from the mobile app\n- **Efficient Resource Usage**: Reduces unnecessary API calls and server load\n- **Better User Experience**: Your application stays updated without constant polling\n\n## How Webhooks Work with Oura\n1. **You set up an endpoint**: Create a URL on your server that can receive POST requests\n2. **You subscribe to events**: Tell Oura what data types and events you want to be notified about\n3. **Oura verifies your endpoint**: A one-time check to ensure your endpoint is valid\n4. **Oura sends notifications**: When data changes, Oura sends a POST request to your endpoint\n5. **You process the event**: Your endpoint receives basic event details\n6. **You fetch complete data**: Use the provided IDs to retrieve the full data via the API\n\n## Recommended Implementation Pattern\n1. **Initial Data Load**: When a user first connects, make a single API request for historical data\n2. **Subscribe to Webhooks**: Set up webhook subscriptions for all data types you need\n3. **Process Webhook Events**: As users sync their rings, you'll receive notifications about new data\n4. **Fetch Updated Data**: Use the object_id from webhook events to fetch the specific updated data\n\nThis pattern minimizes API calls while ensuring your application always has the latest data.\n\n## Setup Guide\n\n### Step 1: Create Your Webhook Endpoint\nSet up an HTTP endpoint on your server that can:\n- Handle both GET requests (for verification) and POST requests (for events)\n- Respond to verification challenges during subscription setup\n- Process incoming webhook events quickly (under 10 seconds)\n\nExample endpoint implementation (Node.js):\n```javascript\n// Express.js route handlers for your webhook endpoint\napp.get('/oura-webhook', (req, res) => {\n  // Verification handler - required during subscription setup\n  const { verification_token, challenge } = req.query;\n\n  // Verify the token matches your expected token\n  if (verification_token === YOUR_VERIFICATION_TOKEN) {\n    // Return the challenge in the required format\n    return res.json({ challenge });\n  }\n\n  // If verification fails\n  return res.status(401).send('Invalid verification token');\n});\n\napp.post('/oura-webhook', (req, res) => {\n  // Event handler - processes incoming webhook events\n\n  // Always respond quickly (under 10 seconds)\n  // Process the event asynchronously if needed\n  res.status(200).send('OK');\n\n  // Then process the event data\n  const { event_type, data_type, object_id, user_id } = req.body;\n  processEventAsync(event_type, data_type, object_id, user_id);\n});\n```\n\n### Step 2: Create a Webhook Subscription\nCall the `POST /v2/webhook/subscription` endpoint to register your webhook:\n\n```\nPOST /v2/webhook/subscription\nHeaders:\n  x-client-id: YOUR_CLIENT_ID\n  x-client-secret: YOUR_CLIENT_SECRET\n  Content-Type: application/json\n\nBody:\n{\n  \"callback_url\": \"https://your-server.com/oura-webhook\",\n  \"verification_token\": \"your-secret-verification-token\",\n  \"event_type\": \"update\",\n  \"data_type\": \"sleep\"\n}\n```\n\nYou need to create separate subscriptions for each combination of:\n- **event_type**: The type of event (create, update, delete)\n- **data_type**: The type of data you're interested in (sleep, activity, etc.)\n\n### Step 3: Verification Process\nWhen you create a subscription, Oura verifies your endpoint:\n\n1. Oura sends a GET request to your callback URL with query parameters:\n   ```\n   GET https://your-server.com/oura-webhook?verification_token=your-token&challenge=random-string\n   ```\n\n2. Your endpoint must verify the token and respond with the challenge:\n   ```json\n   {\n     \"challenge\": \"random-string\"\n   }\n   ```\n\n3. If verification succeeds, your subscription is activated\n\n![Verification Flow](/img/webhook-verification-flow-diagram.drawio.png)\n\n### Step 4: Receiving and Processing Events\nWhen an event occurs (e.g., user syncs new sleep data):\n\n1. Oura sends a POST request to your callback URL:\n   ```\n   POST https://your-server.com/oura-webhook\n   Headers:\n     x-oura-signature: HMAC_SIGNATURE\n     x-oura-timestamp: 1234567890\n\n   Body:\n   {\n     \"event_type\": \"update\",\n     \"data_type\": \"sleep\",\n     \"object_id\": \"12345abc\",\n     \"event_time\": \"2023-01-01T08:00:00+00:00\",\n     \"user_id\": \"user123\"\n   }\n   ```\n\n2. Your endpoint should:\n   - Verify the signature for security (see below)\n   - Respond quickly (under 10 seconds) with a 2xx status\n   - Process the event asynchronously if needed\n   - Use the object_id to fetch the complete data via the API\n\n## Security Best Practices\n\n### Verify Webhook Signatures\nAlways verify that webhook requests are actually from Oura by checking the HMAC signature:\n\n```javascript\nconst crypto = require('crypto');\n\nfunction verifySignature(headers, body, clientSecret) {\n  const signature = headers['x-oura-signature'];\n  const timestamp = headers['x-oura-timestamp'];\n\n  // Create HMAC using your client secret\n  const hmac = crypto.createHmac('sha256', clientSecret);\n  hmac.update(timestamp + JSON.stringify(body));\n  const calculatedSignature = hmac.digest('hex').toUpperCase();\n\n  // Compare calculated signature with received signature\n  return calculatedSignature === signature;\n}\n\n// In your webhook handler\napp.post('/oura-webhook', (req, res) => {\n  // Verify signature\n  if (!verifySignature(req.headers, req.body, CLIENT_SECRET)) {\n    return res.status(401).send('Invalid signature');\n  }\n\n  // Process valid webhook\n  res.status(200).send('OK');\n  // ...\n});\n```\n\n### Use HTTPS\nAlways use HTTPS for your webhook endpoint to ensure data is encrypted in transit.\n\n### Keep Your Verification Token Secret\nChoose a strong, random verification token and don't share it.\n\n## Handling Webhook Failures\n\n### Retry Mechanism\nOura will retry failed webhook deliveries:\n- For 4xx responses: 10 retries\n- For 5xx responses: 10 retries\n- For timeouts: 10 retries\n\n### Canceling Subscriptions\nIf you want to cancel a subscription, you can:\n- Use the DELETE endpoint: `DELETE /v2/webhook/subscription/{id}`\n- Or respond with a 410 status code to automatically cancel\n\n## Common Questions\n\n### How quickly will I receive webhooks?\nWebhook notifications arrive approximately 30 seconds after data syncs from the mobile app. The timing depends on the data type:\n- **Sleep, Readiness, and other user-initiated sync data**: These only sync when the user opens the Oura app and actively syncs their ring\n- **Daily Activity, Daily Stress, and other background data**: These may update periodically in the background without user action\n\n### What if my server goes down?\nOura will retry webhook deliveries for about an hour if your server doesn't respond properly. However, if your server is down for an extended period, you might miss some events. It's a good practice to implement a reconciliation process that can fetch data for periods when your webhook might have been unavailable.\n\n### How can I test webhooks locally?\nUse a tool like [ngrok](https://ngrok.com/) to expose your local development server to the internet with a public URL.\n\n### Can I use the same callback URL for different subscriptions?\nYes, you can use the same URL for multiple subscriptions. Your handler can differentiate between events using the `event_type` and `data_type` fields in the webhook payload.\n\n### Will I hit rate limits using webhooks?\nWe have not had customers hit rate limits with webhooks properly implemented. The recommended pattern is:\n1. Make a single request for historical data when a user first connects\n2. Use webhooks for all ongoing data updates\n3. Only fetch the specific data that has changed based on webhook notifications\n\nThis approach minimizes API calls while ensuring your application always has the latest data.\n        "
+  }
+ ],
+ "overviewSections": [
+  "## Quick Start Guide\n1. Register an [API Application](https://cloud.ouraring.com/oauth/applications) and implement OAuth2\n2. **Make Your First API Call**:\n   ```\n   curl -X GET https://api.ouraring.com/v2/usercollection/personal_info \\\n   -H \"Authorization: Bearer YOUR_TOKEN_HERE\"\n   ```\n3. **Explore Data Types**:\n   - Browse the available endpoints in this documentation to discover what data you can access\n   - Each endpoint includes example requests and responses\n4. **Set Up Webhooks (Strongly Recommended)**:\n   - Webhooks are the preferred way to consume Oura data\n   - We have not had customers hit rate limits with webhooks properly implemented\n   - Make a single request for historical data when a user first connects, then use webhooks for ongoing updates\n   - Webhook notifications come approximately 30 seconds after data syncs from the mobile app\n   - [Set up webhooks](#tag/Webhook-Subscription-Routes) to receive notifications when data changes",
+  "# Oura HTTP Response Codes\n| Response Code                        | Description |\n| ------------------------------------ | - |\n| 200 OK                               | Successful Response         |\n| 400 Query Parameter Validation Error | The request contains query parameters that are invalid or incorrectly formatted. |\n| 401 Unauthorized                     | Invalid or expired authentication token. |\n| 403 Forbidden                        | The requested resource requires additional permissions or the user's Oura subscription has expired. |\n| 429 Too Many Requests                | Rate limit exceeded. See response headers for retry guidance. |\n",
+  "## Rate Limits\nThe API enforces rate limits at two layers to ensure fair access across all applications:\n- a per-access-token limit, which throttles single-token floods, and\n- a per-application limit, which caps the aggregate traffic across all of an application's end-user tokens so one fan-out app can't dominate shared capacity.\n\nA request that trips either layer receives a `429 Too Many Requests`. The `X-RateLimit-Tier` response header identifies which layer fired.\n\nIf your application regularly approaches rate limits, [webhooks](#tag/Webhook-Subscription-Routes) are strongly recommended \u2014 most applications that implement webhooks correctly do not encounter rate limit issues.\n\n[Contact us](mailto:api-support@ouraring.com) if you expect your usage to require higher limits.\n",
+  "## Rate Limit Response Headers\nWhen a `429 Too Many Requests` response is returned, five headers are included to guide retries. Prefer these over fixed-interval backoff:\n- **`Retry-After`** \u2014 integer seconds to wait before retrying. RFC 7231-compliant; safe to feed directly into your client's backoff logic.\n- **`X-RateLimit-Limit`** \u2014 the request ceiling for the current window.\n- **`X-RateLimit-Window`** \u2014 the rolling window length in seconds that the ceiling applies to.\n- **`X-RateLimit-Reset`** \u2014 Unix epoch (seconds) at which the window resets and quota is fully restored.\n- **`X-RateLimit-Tier`** \u2014 identifies which limit was exceeded, useful when contacting support.\n"
+ ]
+}

@@ -4,9 +4,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./strava": "./src/strava/index.ts"
   },
   "dependencies": {
+    "@rd/scoring-engine": "workspace:*",
     "@rd/shared-types": "workspace:*"
   },
   "scripts": {

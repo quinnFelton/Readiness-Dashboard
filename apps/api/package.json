@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@rd/provider-adapters": "workspace:*",
+    "@rd/scoring-engine": "workspace:*",
     "@rd/shared-types": "workspace:*",
     "express": "^5.2.1",
     "pg": "^8.23.1",
