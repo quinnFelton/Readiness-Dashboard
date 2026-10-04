@@ -20,4 +20,5 @@ export interface NormalizedActivityEffort {
   avgHr: number;
   peak20Power?: number; // best rolling 20-min average power
   peak20AvgHr?: number; // HR over that same window, never whole-ride (CLAUDE.md rule 2)
+  deriverId?: string; // PLAN §8.8 deriver that produced the row; omitted = the default deriver
 }

@@ -40,7 +40,8 @@ docs/OWNERSHIP.md   Which phase may edit which paths — READ BEFORE EDITING
    Use a prefix-sum sliding window (O(n)).
 3. **RBAC server-side on every endpoint.** UI hiding is never the control.
 4. **Every table has `user_id`.** Upserts are idempotent (`ON CONFLICT ... DO UPDATE`) on
-   the natural keys in PLAN §7.
+   the natural keys in PLAN §7. Only exception: global method registries that hold no one's
+   data (`derivers`, `classifiers`, PLAN §8.7/§8.8). Anything per-person needs `user_id`.
 5. **No raw streams or payloads in main tables.** Derive scalars, discard source data.
    Bump `derivation_version` when derivation logic changes.
 6. **Never log tokens, secrets, or raw health payloads** above DEBUG. Tokens are encrypted
