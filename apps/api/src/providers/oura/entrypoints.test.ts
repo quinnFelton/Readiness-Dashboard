@@ -1,8 +1,9 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { closePool } from '../../users/pool';
+import { closePool, getPool } from '../../users/pool';
 import { handler as subscriptionsHandler } from './subscriptions-job';
 import { handler as syncHandler } from './sync-job';
+import { acquireOuraTestMutex } from './test-mutex';
 
 // Lambda entrypoints build their deps from env; these tests run them that way.
 // Sync needs migrated local Postgres; all Oura HTTP is mocked (CLAUDE.md rule 10).
@@ -17,12 +18,17 @@ const ENV = {
 };
 
 describe('Oura Lambda entrypoints', () => {
-  beforeAll(() => {
+  // The empty-event sync handler touches EVERY active Oura connection, so hold the shared Oura test
+  // mutex like the other Oura DB test files (otherwise it locks/syncs their users mid-test).
+  let releaseMutex: (() => Promise<void>) | undefined;
+  beforeAll(async () => {
     for (const [k, v] of Object.entries(ENV)) vi.stubEnv(k, v);
+    releaseMutex = await acquireOuraTestMutex(getPool());
   });
   afterEach(() => vi.unstubAllGlobals());
   afterAll(async () => {
     vi.unstubAllEnvs();
+    await releaseMutex?.();
     await closePool();
   });
 
