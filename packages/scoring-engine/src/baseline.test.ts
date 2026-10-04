@@ -26,7 +26,13 @@ describe('rollingBaseline', () => {
     // z = (12 − 10.5) / √(7/9) = 4.5/√7 = 1.7008401285415224
     const series = dailySeries(ASOF, 28, (age) => (age < 7 ? 12 : 10));
     const b = rollingBaseline(series, W, ASOF);
-    expect(b).toMatchObject({ asOf: ASOF, shortMean: 12, shortCount: 7, longMean: 10.5, longCount: 28 });
+    expect(b).toMatchObject({
+      asOf: ASOF,
+      shortMean: 12,
+      shortCount: 7,
+      longMean: 10.5,
+      longCount: 28,
+    });
     expect(b.longStdDev).toBeCloseTo(Math.sqrt(7 / 9), 12);
     expect(b.z).toBeCloseTo(4.5 / Math.sqrt(7), 12);
   });
@@ -94,7 +100,11 @@ describe('rollingBaseline', () => {
     const old = rollingBaseline(dailySeries(addDays(ASOF, -10), 10, () => 5), W, ASOF);
     expect(old).toMatchObject({ shortMean: null, longCount: 10, z: null });
     // Exclusive mode with only short-window points: no long baseline.
-    const shortOnly = rollingBaseline(dailySeries(ASOF, 3, () => 5), { ...W, longExcludesShort: true }, ASOF);
+    const shortOnly = rollingBaseline(
+      dailySeries(ASOF, 3, () => 5),
+      { ...W, longExcludesShort: true },
+      ASOF,
+    );
     expect(shortOnly).toMatchObject({ shortCount: 3, longMean: null, longCount: 0, z: null });
   });
 

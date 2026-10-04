@@ -92,7 +92,9 @@ function assess(
         `and ${b.longCount} in the long window (needs ${minLong})`,
     };
   }
-  if (b.z === null) return { z: null, problem: `${label} baseline has no spread to compare against` };
+  if (b.z === null) {
+    return { z: null, problem: `${label} baseline has no spread to compare against` };
+  }
   return { z: b.z, problem: null };
 }
 
@@ -132,7 +134,8 @@ export function recoveryTrend(
   if (rhr.problem === null) components.push(-rhr.z);
   else problems.push(rhr.problem);
 
-  const enough = components.length === 2 || (components.length === 1 && config.allowSingleRecoverySignal);
+  const enough =
+    components.length === 2 || (components.length === 1 && config.allowSingleRecoverySignal);
   let z: number | null = null;
   if (enough) {
     z = components.reduce((s, c) => s + c, 0) / components.length;
@@ -232,12 +235,17 @@ export function classifyFatigueFitness(
     state = 'ambiguous';
     insightText =
       `Efficiency falling ${efPart} without a matching recovery drop; ${recPart}. ` +
-      `Could be heat, altitude, pacing, nutrition, or illness not yet showing in HRV. Worth a review.`;
+      `Could be heat, altitude, pacing, nutrition, or illness not yet showing in HRV. ` +
+      `Worth a review.`;
   } else {
     state = 'ambiguous';
+    const earlyWarning =
+      recDir === 'down'
+        ? ' Recovery is falling before efficiency has moved, so watch the next few rides.'
+        : '';
     insightText =
       `Efficiency steady ${efPart}; ${recPart}. No clear fitness or fatigue signal.` +
-      (recDir === 'down' ? ' Recovery is falling before efficiency has moved, so watch the next few rides.' : '');
+      earlyWarning;
   }
 
   return {

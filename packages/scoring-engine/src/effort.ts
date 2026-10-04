@@ -2,11 +2,7 @@
  * Per-activity derivation, stream → scalars (PLAN §8.1). The output maps 1:1 onto an
  * `activity_efforts` row (PLAN §7). The caller discards the stream afterwards (PLAN §13).
  */
-import {
-  PEAK20_WINDOW_SEC,
-  normalizedPowerFromGrid,
-  peakWindowFromGrid,
-} from './power';
+import { PEAK20_WINDOW_SEC, normalizedPowerFromGrid, peakWindowFromGrid } from './power';
 import { DEFAULT_MAX_GAP_SEC, resampleTo1Hz, type StreamSample } from './stream';
 import { DERIVATION_VERSION } from './version';
 
@@ -50,9 +46,9 @@ export interface QualifyingEffort extends EffortCommon {
   qualifies: true;
   avgPower: number;
   avgHr: number;
-  /** Null only if the active grid is shorter than 30 s (only possible with a tiny minDurationSec). */
+  /** Null only if active time < 30 s (possible only with a tiny minDurationSec). */
   normalizedPower: number | null;
-  /** Null only if the active grid is shorter than 20 min (only possible with a small minDurationSec). */
+  /** Null only if active time < 20 min (possible only with minDurationSec < 1200). */
   peak20Power: number | null;
   /** HR over the exact peak20 window, or null if that window's HR coverage < minHrCoverage. */
   peak20AvgHr: number | null;

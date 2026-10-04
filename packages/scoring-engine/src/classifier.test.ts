@@ -155,9 +155,14 @@ describe('classifyFatigueFitness: quadrants (PLAN §8.3)', () => {
 
   it('EF flat → ambiguous, told apart by efDirection and the text', () => {
     const steady = classifyFatigueFitness(b(0.2), rec(0));
-    expect(steady).toMatchObject({ state: 'ambiguous', efDirection: 'flat', recoveryDirection: 'flat' });
+    expect(steady).toMatchObject({
+      state: 'ambiguous',
+      efDirection: 'flat',
+      recoveryDirection: 'flat',
+    });
     expect(steady.insightText).toBe(
-      'Efficiency steady (EF z +0.2); recovery stable (z +0.0). No clear fitness or fatigue signal.',
+      'Efficiency steady (EF z +0.2); recovery stable (z +0.0). ' +
+        'No clear fitness or fatigue signal.',
     );
     const early = classifyFatigueFitness(b(0.2), rec(-1));
     expect(early.state).toBe('ambiguous');

@@ -32,8 +32,12 @@ describe('deriveActivityEffort', () => {
     expect(e.derivationVersion).toBe(DERIVATION_VERSION);
   });
 
-  it('isolates a threshold effort in junk miles and keeps peak20 HR on that window (fixture 2)', () => {
-    const s = segments([...junk(900, 125), { sec: 1200, watts: 300, hr: 165 }, ...junk(1500, 130)]);
+  it('isolates a threshold effort in junk miles, HR from that window (fixture 2)', () => {
+    const s = segments([
+      ...junk(900, 125),
+      { sec: 1200, watts: 300, hr: 165 },
+      ...junk(1500, 130),
+    ]);
     const e = qualifying(deriveActivityEffort(s));
     expect(e.peak20Power).toBe(300);
     expect(e.peak20AvgHr).toBe(165);
@@ -75,7 +79,10 @@ describe('deriveActivityEffort', () => {
       { sec: 1700, watts: 200, hr: 140 },
       { sec: 300, watts: null, hr: 140 }, // 85 % coverage < 90 %
     ]);
-    expect(deriveActivityEffort(s)).toMatchObject({ qualifies: false, reason: 'insufficient_power' });
+    expect(deriveActivityEffort(s)).toMatchObject({
+      qualifies: false,
+      reason: 'insufficient_power',
+    });
     expect(deriveActivityEffort(s, { minPowerCoverage: 0.8 }).qualifies).toBe(true);
   });
 
@@ -128,7 +135,7 @@ describe('deriveActivityEffort', () => {
     expect(e.efPeak20).toBeNull();
   });
 
-  it('returns null NP/peak20 when a lowered minimum admits a ride too short to compute them', () => {
+  it('returns null NP/peak20 when a lowered minimum admits a ride too short for them', () => {
     const tiny = qualifying(deriveActivityEffort(steadyRide(20, 200, 140), { minDurationSec: 10 }));
     expect(tiny.normalizedPower).toBeNull();
     expect(tiny.efOverall).toBeNull();
@@ -138,7 +145,9 @@ describe('deriveActivityEffort', () => {
     expect(tiny.peak20EndT).toBeNull();
     expect(tiny.efPeak20).toBeNull();
 
-    const short = qualifying(deriveActivityEffort(steadyRide(600, 200, 140), { minDurationSec: 60 }));
+    const short = qualifying(
+      deriveActivityEffort(steadyRide(600, 200, 140), { minDurationSec: 60 }),
+    );
     expect(short.normalizedPower).toBeCloseTo(200, 9);
     expect(short.efOverall).toBeCloseTo(200 / 140, 9);
     expect(short.peak20Power).toBeNull();
@@ -167,9 +176,7 @@ describe('effort options', () => {
   it('rejects invalid thresholds', () => {
     expect(() => resolveEffortOptions({ minDurationSec: -1 })).toThrow(RangeError);
     expect(() => resolveEffortOptions({ minDurationSec: Number.NaN })).toThrow(RangeError);
-    expect(() => resolveEffortOptions({ minDurationSec: Number.POSITIVE_INFINITY })).toThrow(
-      RangeError,
-    );
+    expect(() => resolveEffortOptions({ minDurationSec: Infinity })).toThrow(RangeError);
     expect(() => resolveEffortOptions({ minPowerCoverage: 1.5 })).toThrow(RangeError);
     expect(() => resolveEffortOptions({ minHrCoverage: -0.1 })).toThrow(RangeError);
     expect(() => deriveActivityEffort([], { maxGapSec: 0 })).toThrow(RangeError);

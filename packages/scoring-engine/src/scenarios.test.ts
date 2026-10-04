@@ -26,7 +26,9 @@ const RIDE_SEC = 1500;
  */
 function driftRide(baseHr: number, driftBpm: number): StreamSample[] {
   const s: StreamSample[] = [];
-  for (let t = 0; t < RIDE_SEC; t++) s.push({ t, watts: POWER, hr: baseHr + (driftBpm * t) / RIDE_SEC });
+  for (let t = 0; t < RIDE_SEC; t++) {
+    s.push({ t, watts: POWER, hr: baseHr + (driftBpm * t) / RIDE_SEC });
+  }
   return s;
 }
 
@@ -84,11 +86,12 @@ describe('PLAN §8.5 fixture 3: multi-day HR drift at constant power', () => {
   });
 
   it('sees EF falling when drift worsens and rising when it shrinks, in both EF series', () => {
+    const dz = DEFAULT_CLASSIFIER_CONFIG.efDeadZone;
     for (const series of [decoupling.peak20, decoupling.overall]) {
-      expect(rollingBaseline(series, W, ASOF).z!).toBeLessThan(-DEFAULT_CLASSIFIER_CONFIG.efDeadZone);
+      expect(rollingBaseline(series, W, ASOF).z!).toBeLessThan(-dz);
     }
     for (const series of [coupling.peak20, coupling.overall]) {
-      expect(rollingBaseline(series, W, ASOF).z!).toBeGreaterThan(DEFAULT_CLASSIFIER_CONFIG.efDeadZone);
+      expect(rollingBaseline(series, W, ASOF).z!).toBeGreaterThan(dz);
     }
   });
 
