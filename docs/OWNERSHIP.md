@@ -13,6 +13,7 @@ Anything else goes in its final report under "Needs from other phases".
 | 3a Oura | `phase-3a/oura` | `packages/provider-adapters/src/oura/**`, `apps/api/src/providers/oura/**`, migration `*_phase-3a_*` |
 | 3b Terra | `phase-3b/terra` | `packages/provider-adapters/src/terra/**`, `apps/api/src/providers/terra/**`, `apps/api/src/webhooks/terra/**`, migration `*_phase-3b_*` |
 | 4 Strava | `phase-4/strava` | `packages/provider-adapters/src/strava/**`, `apps/api/src/providers/strava/**`, `apps/api/src/webhooks/strava/**`, `apps/api/src/efforts/**`, migration `*_phase-4_*` |
+| fw Comparison frameworks (owner, 2026-10-04) | `feat/comparison-frameworks` | `packages/scoring-engine/src/{registry,deriver,trend-classifier}.ts`, migration `*_phase-fw_*`; later phases extend these registries, adding a migration row for every new deriver or classifier id |
 | 5b Classifier service | `phase-5b/classifier-service` | `apps/api/src/trends/**`, `apps/api/src/scores/**`, `apps/api/src/fatigue-fitness/**`, migration `*_phase-5b_*` |
 | 6a Dashboard UI | `phase-6a/dashboard` | `apps/web/src/app/dashboard/**`, `apps/web/src/components/charts/**`, `apps/web/src/components/dashboard/**` |
 | 6b Admin UI | `phase-6b/admin` | `apps/web/src/app/admin/**`, `apps/web/src/components/admin/**` |

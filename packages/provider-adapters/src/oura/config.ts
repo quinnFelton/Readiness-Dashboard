@@ -84,7 +84,8 @@ export function ouraConfigFromEnv(env: NodeJS.ProcessEnv = process.env): OuraCon
   return {
     clientId: env.OURA_CLIENT_ID ?? '',
     clientSecret: env.OURA_CLIENT_SECRET ?? '',
-    redirectUri: env.OURA_REDIRECT_URI ?? 'http://localhost:4000/api/v1/connections/oura/callback',
+    redirectUri:
+      env.OURA_REDIRECT_URI ?? 'http://localhost:3000/settings/connections/oura/callback',
     sandbox: (env.OURA_USE_SANDBOX ?? 'false').toLowerCase() === 'true',
     scopes: (env.OURA_SCOPES ?? 'daily personal').split(/[\s,]+/).filter(Boolean),
     apiBaseUrl: env.OURA_API_BASE_URL ?? 'https://api.ouraring.com',
