@@ -29,10 +29,7 @@ export const DEFAULT_EFFORT_OPTIONS: Readonly<EffortOptions> = Object.freeze({
 });
 
 export type EffortRejectReason =
-  | 'empty_stream'
-  | 'too_short'
-  | 'insufficient_power'
-  | 'insufficient_hr';
+  'empty_stream' | 'too_short' | 'insufficient_power' | 'insufficient_hr';
 
 interface EffortCommon {
   /** Active (gap-collapsed) duration, rounded to whole seconds. */
@@ -128,9 +125,7 @@ export function deriveActivityEffort(
   const np = normalizedPowerFromGrid(grid.watts);
   const peak = peakWindowFromGrid(grid, PEAK20_WINDOW_SEC);
   const peakHr =
-    peak !== null && peak.avgHr !== null && peak.hrCoverage >= o.minHrCoverage
-      ? peak.avgHr
-      : null;
+    peak !== null && peak.avgHr !== null && peak.hrCoverage >= o.minHrCoverage ? peak.avgHr : null;
 
   return {
     ...common,

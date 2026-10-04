@@ -13,11 +13,7 @@ import type { BaselineResult } from './baseline';
 export type TrendDirection = 'up' | 'down' | 'flat';
 
 export type FatigueFitnessState =
-  | 'fitness_gain'
-  | 'overreaching_risk'
-  | 'acute_fatigue'
-  | 'ambiguous'
-  | 'insufficient_data';
+  'fitness_gain' | 'overreaching_risk' | 'acute_fatigue' | 'ambiguous' | 'insufficient_data';
 
 /** Thresholds are config, not constants (CLAUDE.md rule 9). Calibrate on real data (PLAN §17). */
 export interface ClassifierConfig {
@@ -244,8 +240,7 @@ export function classifyFatigueFitness(
         ? ' Recovery is falling before efficiency has moved, so watch the next few rides.'
         : '';
     insightText =
-      `Efficiency steady ${efPart}; ${recPart}. No clear fitness or fatigue signal.` +
-      earlyWarning;
+      `Efficiency steady ${efPart}; ${recPart}. No clear fitness or fatigue signal.` + earlyWarning;
   }
 
   return {
