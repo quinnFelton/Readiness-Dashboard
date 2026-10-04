@@ -50,6 +50,9 @@ importers:
       '@rd/provider-adapters':
         specifier: workspace:*
         version: link:../../packages/provider-adapters
+      '@rd/scoring-engine':
+        specifier: workspace:*
+        version: link:../../packages/scoring-engine
       '@rd/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
@@ -126,6 +129,9 @@ importers:
 
   packages/provider-adapters:
     dependencies:
+      '@rd/scoring-engine':
+        specifier: workspace:*
+        version: link:../scoring-engine
       '@rd/shared-types':
         specifier: workspace:*
         version: link:../shared-types
