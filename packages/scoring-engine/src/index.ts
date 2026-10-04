@@ -57,3 +57,23 @@ export {
   type RecoveryTrend,
   type TrendDirection,
 } from './classifier';
+
+// Side-by-side variants (PLAN §8.7 classifiers, §8.8 derivers).
+export { StrategyRegistry, type Strategy } from './registry';
+
+export {
+  DEFAULT_DERIVER_ID,
+  PEAK20_V1,
+  createDeriverRegistry,
+  type ActivityEffortDeriver,
+} from './deriver';
+
+export {
+  DEFAULT_CLASSIFIER_ID,
+  EF_QUADRANT_V1,
+  classifyAll,
+  createClassifierRegistry,
+  efQuadrantClassifier,
+  type TrendClassifier,
+  type TrendInputs,
+} from './trend-classifier';
