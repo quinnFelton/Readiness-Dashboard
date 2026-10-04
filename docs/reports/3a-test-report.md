@@ -33,3 +33,6 @@ None.
 - **Endpoints:** `daily_activity` and `heartrate` are not fetched. The phase prompt listed them, but the four required metrics do not need them.
 - **Entrypoints:** the `handler` entrypoint and the `subscriptions-job` entrypoint have no direct tests, because they build their dependencies from the environment.
 - **Test setup:** the API tests need a migrated local Postgres.
+
+## Owner follow-up (2026-10-04)
+Added `packages/provider-adapters/src/oura/config.test.ts` (`ouraConfigFromEnv` defaults, overrides, numeric fallback, webhook data-type parsing) and `apps/api/src/providers/oura/entrypoints.test.ts` (sync `handler` single-user/all-users; subscriptions `handler` creates missing subscriptions with x-client-id/x-client-secret and returns no secrets). This closes the only open gap. Full suite: 31 files, 287 tests green; typecheck and lint clean.
