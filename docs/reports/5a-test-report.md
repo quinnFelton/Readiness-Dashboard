@@ -1,6 +1,6 @@
 # Phase 5a test report — scoring engine
 
-**passed: true** — typecheck, lint and all 107 tests are green. Two spec points are checked by manual review instead of an automated test (see Risks).
+**passed: true** — typecheck, lint and all 115 tests (10 files) are green. Every spec requirement has an automated test; the O(n) check is timing-only (see Risks).
 
 ## Results
 - `pnpm install --offline --frozen-lockfile` was needed first because `node_modules` was missing in this worktree.
@@ -27,13 +27,12 @@
 | No HRV → abstain (§8.5) | classifier.test.ts, scenarios.test.ts |
 | Public API exports and `DERIVATION_VERSION` | public-api.test.ts |
 | Inputs not mutated, deterministic | public-api.test.ts |
-| No Date.now or apps/* imports | Manual grep of product sources found none. Not enforced by a test. |
+| No Date.now / network / apps/* imports (rule 1) | purity.test.ts (new; scans raw product sources with comments stripped) |
 
 ## Failures
 None.
 
 ## Risks / untested
-- The package has no node types, so the "no Date.now / no apps/* import" purity rule is verified by grep, not by an automated test.
 - The README's formulas and defaults were not machine-checked against the code.
 - The flat-EF → `ambiguous` mapping is an assumption not defined in PLAN §8.3. The code flags it for Quinn to confirm.
 - There is no external NP comparison, for example against TrainingPeaks.
