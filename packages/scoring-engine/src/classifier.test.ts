@@ -88,8 +88,8 @@ describe('recoveryTrend', () => {
     const r = recoveryTrend(b(1, 3, 28), b(1, 7, 13));
     expect(r.direction).toBeNull();
     expect(r.problems).toEqual([
-      'HRV has 3 points in the short window (needs 4) and 28 in the long window (needs 14)',
-      'resting HR has 7 points in the short window (needs 4) and 13 in the long window (needs 14)',
+      'HRV: short window has 3 (needs 4), long window has 28 (needs 14)',
+      'resting HR: short window has 7 (needs 4), long window has 13 (needs 14)',
     ]);
   });
 
@@ -205,7 +205,7 @@ describe('classifyFatigueFitness: abstains instead of guessing', () => {
   it('too few qualifying rides in either window', () => {
     const fewShort = classifyFatigueFitness(b(2, 1, 28), rec(0));
     expect(fewShort.state).toBe('insufficient_data');
-    expect(fewShort.insightText).toContain('EF has 1 points in the short window (needs 2)');
+    expect(fewShort.insightText).toContain('EF: short window has 1 (needs 2)');
     expect(classifyFatigueFitness(b(2, 7, 5), rec(0)).state).toBe('insufficient_data');
     expect(classifyFatigueFitness(b(2, 2, 6), rec(0)).state).toBe('fitness_gain'); // at minimum
   });

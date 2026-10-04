@@ -88,8 +88,8 @@ function assess(
     return {
       z: null,
       problem:
-        `${label} has ${b.shortCount} points in the short window (needs ${minShort}) ` +
-        `and ${b.longCount} in the long window (needs ${minLong})`,
+        `${label}: short window has ${b.shortCount} (needs ${minShort}), ` +
+        `long window has ${b.longCount} (needs ${minLong})`,
     };
   }
   if (b.z === null) {
