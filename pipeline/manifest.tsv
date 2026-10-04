@@ -1,0 +1,15 @@
+# id	agent	branch	base	(base = branch the phase starts from; usually main)
+0	scaffolder	phase-0/scaffold	main
+1	backend-builder	phase-1/auth	main
+2	backend-builder	phase-2/connections	phase-1/auth
+5a	scoring-engine-builder	phase-5a/scoring-engine	main
+3a	provider-adapter-builder	phase-3a/oura	main
+3b	provider-adapter-builder	phase-3b/terra	main
+4	provider-adapter-builder	phase-4/strava	main
+5b	backend-builder	phase-5b/classifier-service	main
+6a	frontend-builder	phase-6a/dashboard	main
+6b	frontend-builder	phase-6b/admin	main
+6c	frontend-builder	phase-6c/connections-ui	main
+7	e2e-tester	phase-7/e2e	main
+8	infra-builder	phase-8/infra	main
+9	backend-builder	phase-9/hardening	main
