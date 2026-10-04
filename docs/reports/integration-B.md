@@ -80,3 +80,9 @@ None of the phase commit messages or reports contain a "Needs from other phases"
 
 Green: typecheck, lint, all 218 unit and DB tests, and the fresh-schema migration check pass.
 The branch is ready for a PR. The items above are notes for later phases, not blockers.
+
+## Owner follow-ups (2026-10-04)
+- Flat EF trend now classifies as `steady` ("steady fitness and fatigue") instead of `ambiguous` (`3b898dd`).
+- `webhook_events` gained a nullable `user_id` (FK, cascade, indexed). NULL means not yet matched to a local user (`4b5fcb5`).
+- Added `apps/api/src/connections/token-logging.test.ts`: tokens never appear in console/stdout/stderr or API responses on connect, list, sync, disconnect and failure paths. A deliberately injected leak was confirmed to make it fail.
+- Full suite: typecheck, lint, 223 tests green.
