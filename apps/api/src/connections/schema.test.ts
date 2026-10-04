@@ -7,6 +7,7 @@ const USER_TABLES = [
   'connection_configs',
   'daily_metrics',
   'activity_efforts',
+  'webhook_events',
 ];
 
 describe('phase 2 schema (PLAN §7)', () => {
@@ -79,5 +80,27 @@ describe('phase 2 schema (PLAN §7)', () => {
     expect(
       (await pool.query('SELECT 1 FROM provider_connections WHERE user_id=$1', [id])).rowCount,
     ).toBe(0);
+  });
+
+  it('webhook_events.user_id is nullable (unmatched events) and cascades on user delete', async () => {
+    const pool = getPool();
+    const unmatched = await pool.query(
+      `INSERT INTO webhook_events(provider,payload_jsonb,status) VALUES ('strava','{}','pending') RETURNING id`,
+    );
+    const email = `p2webhook-${Date.now()}@schema-check.invalid`;
+    const { rows } = await pool.query('INSERT INTO users(email) VALUES ($1) RETURNING id', [email]);
+    const id = rows[0].id;
+    try {
+      await pool.query(
+        `INSERT INTO webhook_events(user_id,provider,payload_jsonb,status) VALUES ($1,'terra','{}','pending')`,
+        [id],
+      );
+    } finally {
+      await pool.query('DELETE FROM users WHERE id=$1', [id]);
+      await pool.query('DELETE FROM webhook_events WHERE id=$1', [unmatched.rows[0].id]);
+    }
+    expect((await pool.query('SELECT 1 FROM webhook_events WHERE user_id=$1', [id])).rowCount).toBe(
+      0,
+    );
   });
 });

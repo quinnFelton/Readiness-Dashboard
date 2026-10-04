@@ -67,6 +67,9 @@ CREATE INDEX idx_activity_efforts_user_date ON activity_efforts (user_id, date);
 -- short-retention audit/replay log, not for analytics (§13: TTL ~30 days)
 CREATE TABLE webhook_events (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Owner addition (CLAUDE.md rule 4): NULL until the payload is matched to a local user
+  -- (e.g. Terra reference_id, PLAN §5.3); events for unknown users/challenges stay NULL.
+  user_id         UUID REFERENCES users(id) ON DELETE CASCADE,
   provider        TEXT NOT NULL,
   payload_jsonb   JSONB NOT NULL,
   received_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -75,6 +78,7 @@ CREATE TABLE webhook_events (
 );
 -- phase-2 addition: supports the §13 TTL sweep (delete where received_at < now() - 30d).
 CREATE INDEX idx_webhook_events_received_at ON webhook_events (received_at);
+CREATE INDEX idx_webhook_events_user_id ON webhook_events (user_id);
 
 -- Down Migration
 DROP TABLE webhook_events;
