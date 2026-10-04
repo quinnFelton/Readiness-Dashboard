@@ -15,3 +15,5 @@ CLAUDE.md
 docs/
 pipeline/
 .claude/
+# Hand-written spec changelog: its code samples use escaped nested fences that Prettier reflows.
+CHANGELOG.md

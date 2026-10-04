@@ -23,8 +23,16 @@ describe('phase 2 schema (PLAN §7)', () => {
     expect(has('connection_configs', /UNIQUE.*\(user_id, role, provider\)/)).toBe(true);
     expect(has('daily_metrics', /UNIQUE.*\(user_id, date, source, metric_type\)/)).toBe(true);
     expect(has('daily_metrics', /idx_daily_metrics_user_date.*\(user_id, date\)/)).toBe(true);
-    expect(has('activity_efforts', /UNIQUE.*\(user_id, external_activity_id\)/)).toBe(true);
-    expect(has('activity_efforts', /idx_activity_efforts_user_date.*\(user_id, date\)/)).toBe(true);
+    // PLAN §8.8: one row per (activity, deriver).
+    expect(has('activity_efforts', /UNIQUE.*\(user_id, external_activity_id, deriver_id\)/)).toBe(
+      true,
+    );
+    expect(
+      has(
+        'activity_efforts',
+        /idx_activity_efforts_user_deriver_date.*\(user_id, deriver_id, date\)/,
+      ),
+    ).toBe(true);
   });
 
   it('per-user tables have user_id; derived tables have derivation_version; webhook status CHECK', async () => {

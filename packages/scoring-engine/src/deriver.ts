@@ -24,7 +24,10 @@ export const PEAK20_V1: ActivityEffortDeriver = Object.freeze({
 /** Matches the seeded `derivers.is_default` row; the DB flag is authoritative at runtime. */
 export const DEFAULT_DERIVER_ID = PEAK20_V1.id;
 
-/** A fresh registry with the built-in derivers. Add variants (A1, A2, ...) here as they land. */
+/**
+ * A fresh registry with the built-in derivers. Add variants (A1, A2, ...) here as they land,
+ * AND add a `derivers` row in a migration: `activity_efforts.deriver_id` references it.
+ */
 export function createDeriverRegistry(): StrategyRegistry<ActivityEffortDeriver> {
   return new StrategyRegistry<ActivityEffortDeriver>('deriver', [PEAK20_V1]);
 }

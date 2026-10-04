@@ -1,5 +1,6 @@
 import type { AdapterRegistry, AnyAdapter, ConnectionGrant } from '@rd/provider-adapters';
 import type { NormalizedActivityEffort, NormalizedDailyMetric } from '@rd/shared-types';
+import { DEFAULT_DERIVER_ID } from '@rd/scoring-engine';
 import type pg from 'pg';
 import type { TokenCipher } from '../crypto/token-cipher';
 
@@ -186,7 +187,8 @@ export class SyncService {
   }
 
   /**
-   * Idempotent on (user_id, external_activity_id). ef_* columns are owned by the scoring engine
+   * Idempotent on (user_id, external_activity_id, deriver_id); rows without a deriverId are the
+   * default deriver's (PLAN §8.8). ef_* columns are owned by the scoring engine
    * (CLAUDE.md rule 1), so a re-derived row resets them to NULL rather than leaving stale values.
    */
   private async upsertActivityEfforts(
@@ -206,7 +208,7 @@ export class SyncService {
       ) {
         throw new Error('invalid normalized activity effort');
       }
-      byKey.set(`${r.userId}|${r.externalActivityId}`, r);
+      byKey.set(`${r.userId}|${r.externalActivityId}|${r.deriverId ?? DEFAULT_DERIVER_ID}`, r);
     }
     const rs = [...byKey.values()];
     if (rs.length === 0) return 0;
@@ -215,10 +217,11 @@ export class SyncService {
     await this.pool.query(
       `INSERT INTO activity_efforts
          (user_id, external_activity_id, source, date, duration_sec, avg_power, normalized_power,
-          avg_hr, peak20_power, peak20_avg_hr, derivation_version)
+          avg_hr, peak20_power, peak20_avg_hr, derivation_version, deriver_id)
        SELECT * FROM unnest($1::uuid[], $2::text[], $3::text[], $4::date[], $5::int[], $6::numeric[],
-                            $7::numeric[], $8::numeric[], $9::numeric[], $10::numeric[], $11::smallint[])
-       ON CONFLICT (user_id, external_activity_id) DO UPDATE SET
+                            $7::numeric[], $8::numeric[], $9::numeric[], $10::numeric[], $11::smallint[],
+                            $12::text[])
+       ON CONFLICT (user_id, external_activity_id, deriver_id) DO UPDATE SET
          source = EXCLUDED.source, date = EXCLUDED.date, duration_sec = EXCLUDED.duration_sec,
          avg_power = EXCLUDED.avg_power, normalized_power = EXCLUDED.normalized_power,
          avg_hr = EXCLUDED.avg_hr, peak20_power = EXCLUDED.peak20_power,
@@ -236,6 +239,7 @@ export class SyncService {
         n((r) => r.peak20Power),
         n((r) => r.peak20AvgHr),
         rs.map(() => version),
+        rs.map((r) => r.deriverId ?? DEFAULT_DERIVER_ID),
       ],
     );
     return rs.length;

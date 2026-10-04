@@ -55,7 +55,10 @@ export const EF_QUADRANT_V1 = efQuadrantClassifier(
 /** Matches the seeded `classifiers.is_default` row; the DB flag is authoritative at runtime. */
 export const DEFAULT_CLASSIFIER_ID = EF_QUADRANT_V1.id;
 
-/** A fresh registry with the built-in classifiers. Add challengers here. */
+/**
+ * A fresh registry with the built-in classifiers. Add challengers here, AND add a
+ * `classifiers` row in a migration: `trends.classifier_id` references it.
+ */
 export function createClassifierRegistry(): StrategyRegistry<TrendClassifier> {
   return new StrategyRegistry<TrendClassifier>('classifier', [EF_QUADRANT_V1]);
 }
