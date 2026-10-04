@@ -44,8 +44,8 @@ const asObj = (v: unknown): Record<string, unknown> | undefined =>
  * POST /api/v1/webhooks/terra (PLAN §6). Auth is the HMAC signature, not a user session.
  *
  * MOUNTING: this router carries its own raw-body parser and MUST be mounted before any global
- * `express.json()` (which would consume the stream and break signature verification). See the
- * "Needs from other phases" note: apps/api/src/app.ts currently installs express.json() first.
+ * `express.json()` (which would consume the stream and break signature verification).
+ * apps/api/src/app.ts mounts it under /api/v1/webhooks ahead of express.json() (stage C).
  */
 export function terraWebhookRouter(deps: TerraWebhookDeps = {}): Router {
   const registry = deps.registry ?? defaultRegistry;
