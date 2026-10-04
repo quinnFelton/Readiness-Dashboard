@@ -1,0 +1,37 @@
+{
+  "_note": "HAND-WRITTEN from memory of the Oura v2 shape, NOT recorded from the live API. Re-record once field names are verified against https://cloud.ouraring.com/v2/docs.",
+  "dailyReadiness": [
+    { "id": "r1", "day": "2026-09-01", "score": 82, "temperature_deviation": 0.1 },
+    { "id": "r2", "day": "2026-09-02", "score": null }
+  ],
+  "dailySleep": [
+    { "id": "s1", "day": "2026-09-01", "score": 77 },
+    { "id": "s2", "day": "bad-date", "score": 50 }
+  ],
+  "sleep": [
+    {
+      "id": "p1",
+      "day": "2026-09-01",
+      "type": "nap",
+      "average_hrv": 20,
+      "lowest_heart_rate": 70,
+      "total_sleep_duration": 1800
+    },
+    {
+      "id": "p2",
+      "day": "2026-09-01",
+      "type": "long_sleep",
+      "average_hrv": 54.5,
+      "lowest_heart_rate": 48,
+      "total_sleep_duration": 27000
+    },
+    {
+      "id": "p3",
+      "day": "2026-09-02",
+      "type": "long_sleep",
+      "average_hrv": null,
+      "lowest_heart_rate": 50,
+      "total_sleep_duration": 25000
+    }
+  ]
+}
