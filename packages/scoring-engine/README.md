@@ -111,21 +111,21 @@ are required (`allowSingleRecoverySignal: false`), so "no HRV connected yet" abs
 Direction from z with dead zone `d`: `z > d` → up, `z < −d` → down, `|z| ≤ d` → **flat**
 (the boundary itself is flat).
 
-| EF                    | Recovery  | State                           |
-| --------------------- | --------- | ------------------------------- |
-| up                    | flat / up | `fitness_gain`                  |
-| up                    | down      | `overreaching_risk`             |
-| down                  | down      | `acute_fatigue`                 |
-| down                  | flat / up | `ambiguous`                     |
-| flat                  | any       | `ambiguous` (pending, PLAN §17) |
-| any side lacking data |           | `insufficient_data`             |
+| EF                    | Recovery  | State               |
+| --------------------- | --------- | ------------------- |
+| up                    | flat / up | `fitness_gain`      |
+| up                    | down      | `overreaching_risk` |
+| down                  | down      | `acute_fatigue`     |
+| down                  | flat / up | `ambiguous`         |
+| flat                  | any       | `steady`            |
+| any side lacking data |           | `insufficient_data` |
 
 `efTrend` should be the `ef_peak20` baseline (the primary signal, PLAN §8.2). The
 classifier applies its **own** config's dead zone to the recovery z, so the result never
 depends on how the `RecoveryTrend` was built. `insufficient_data` insight text lists every
 missing piece (e.g. "EF: short window has 1 (needs 2), long window has 5 (needs 6); no HRV
-data"). PLAN §8.3 has no row for flat EF; it maps to `ambiguous` (distinguishable by
-`efDirection: 'flat'`) until Quinn confirms otherwise.
+data"). PLAN §8.3 has no row for flat EF; by owner decision (2026-10-04) it maps to
+`steady` ("steady fitness and fatigue"), with an early-warning note if recovery is falling.
 
 **`DEFAULT_CLASSIFIER_CONFIG`** (PLAN §17: calibrate on real data):
 

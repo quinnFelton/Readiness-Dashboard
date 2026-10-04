@@ -153,19 +153,19 @@ describe('classifyFatigueFitness: quadrants (PLAN §8.3)', () => {
     }
   });
 
-  it('EF flat → ambiguous, told apart by efDirection and the text', () => {
+  it('EF flat → steady (owner decision; PLAN §8.3 has no flat-EF row)', () => {
     const steady = classifyFatigueFitness(b(0.2), rec(0));
     expect(steady).toMatchObject({
-      state: 'ambiguous',
+      state: 'steady',
       efDirection: 'flat',
       recoveryDirection: 'flat',
     });
     expect(steady.insightText).toBe(
-      'Efficiency steady (EF z +0.2); recovery stable (z +0.0). ' +
-        'No clear fitness or fatigue signal.',
+      'Efficiency steady (EF z +0.2); recovery stable (z +0.0): steady fitness and fatigue.',
     );
+    expect(classifyFatigueFitness(b(-0.3), rec(1)).state).toBe('steady');
     const early = classifyFatigueFitness(b(0.2), rec(-1));
-    expect(early.state).toBe('ambiguous');
+    expect(early.state).toBe('steady');
     expect(early.insightText).toContain('Recovery is falling before efficiency has moved');
   });
 });

@@ -13,7 +13,12 @@ import type { BaselineResult } from './baseline';
 export type TrendDirection = 'up' | 'down' | 'flat';
 
 export type FatigueFitnessState =
-  'fitness_gain' | 'overreaching_risk' | 'acute_fatigue' | 'ambiguous' | 'insufficient_data';
+  | 'fitness_gain'
+  | 'overreaching_risk'
+  | 'acute_fatigue'
+  | 'ambiguous'
+  | 'steady'
+  | 'insufficient_data';
 
 /** Thresholds are config, not constants (CLAUDE.md rule 9). Calibrate on real data (PLAN §17). */
 export interface ClassifierConfig {
@@ -176,11 +181,10 @@ const RECOVERY_WORD: Record<TrendDirection, string> = {
  * | up   | down      | overreaching_risk  |
  * | down | down      | acute_fatigue      |
  * | down | flat / up | ambiguous          |
- * | flat | any       | ambiguous (*)      |
+ * | flat | any       | steady (*)         |
  *
- * (*) PLAN §8.3 doesn't define a flat-EF row. We don't invent a label: it's `ambiguous`,
- * and `efDirection: 'flat'` plus the insight text tell it apart from the EF-down case.
- * This is listed for Quinn to confirm.
+ * (*) PLAN §8.3 doesn't define a flat-EF row. Owner decision (2026-10-04): flat EF means
+ * "steady fitness and fatigue". If recovery is falling, the text adds an early warning.
  *
  * `efTrend` should be the ef_peak20 baseline, the primary signal per PLAN §8.2.
  */
@@ -234,13 +238,13 @@ export function classifyFatigueFitness(
       `Could be heat, altitude, pacing, nutrition, or illness not yet showing in HRV. ` +
       `Worth a review.`;
   } else {
-    state = 'ambiguous';
+    state = 'steady';
     const earlyWarning =
       recDir === 'down'
         ? ' Recovery is falling before efficiency has moved, so watch the next few rides.'
         : '';
     insightText =
-      `Efficiency steady ${efPart}; ${recPart}. No clear fitness or fatigue signal.` + earlyWarning;
+      `Efficiency steady ${efPart}; ${recPart}: steady fitness and fatigue.` + earlyWarning;
   }
 
   return {
