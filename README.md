@@ -206,7 +206,7 @@ This project handles real sleep, HRV, and heart-rate data. OAuth tokens are encr
  
 ## License
  
-None 
+MIT - Quinn Felton 2026
  
 ---
  
