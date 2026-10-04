@@ -90,16 +90,18 @@ describe('oura sync job', () => {
     expect(rows[0].access_token_enc.toString('utf8')).not.toContain('A1');
     expect(rows[0].last_synced_at.toISOString()).toBe(now.toISOString());
     // first sync = lookback window
-    expect(new URL(urls[0]!).searchParams.get('start_date')).toBe('2026-08-11');
+    const first = urls.find((x) => x.includes('daily_readiness'))!;
+    expect(new URL(first).searchParams.get('start_date')).toBe('2026-08-11');
   });
 
   it('second run is incremental, does not refresh again, and is idempotent', async () => {
     urls.length = 0;
-    now = new Date('2026-09-10T18:00:00Z');
+    now = new Date('2026-09-10T12:30:00Z'); // before refreshed token expiry (13:00 minus skew)
     const res = await syncOuraUser(userId, deps);
     expect(res.ok).toBe(true);
     expect(tokenCalls).toBe(1);
-    expect(new URL(urls[0]!).searchParams.get('start_date')).toBe('2026-09-08'); // last_synced 09-10 minus 2d overlap
+    const second = urls.find((x) => x.includes('daily_readiness'))!;
+    expect(new URL(second).searchParams.get('start_date')).toBe('2026-09-08'); // last_synced 09-10 minus 2d overlap
     const { rows } = await pool.query(
       `SELECT count(*)::int AS n FROM daily_metrics WHERE user_id=$1 AND source='oura'`,
       [userId],
