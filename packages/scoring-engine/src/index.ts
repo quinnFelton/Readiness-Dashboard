@@ -77,3 +77,16 @@ export {
   type TrendClassifier,
   type TrendInputs,
 } from './trend-classifier';
+
+// Classifier outcome backtest against athlete events (PLAN §8.7).
+export {
+  EMPTY_BACKTEST,
+  backtestFlags,
+  sumBacktests,
+  validateBacktestConfig,
+  type BacktestConfig,
+  type BacktestEvent,
+  type BacktestFlag,
+  type BacktestOptions,
+  type BacktestResult,
+} from './backtest';
