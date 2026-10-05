@@ -116,6 +116,7 @@ describe('history rebuild (DB)', () => {
       expect(await trendDays(userId)).toEqual([]);
       await markHistoryDirty(pool(), userId, FULL_HISTORY_FROM);
       const r = await runHistoryRebuild(pool(), svc, {
+        userId, // scoped: other test files leave pending requests in the shared DB
         config: { maxDatesPerUser: 500, maxUsers: 10 },
       });
       expect(r.failures).toBe(0);
@@ -134,7 +135,7 @@ describe('history rebuild (DB)', () => {
     it('is bounded per invocation and resumes from its cursor until done', async () => {
       await markHistoryDirty(pool(), userId, FULL_HISTORY_FROM);
       const cfg = { maxDatesPerUser: 30, maxUsers: 10 };
-      const first = await runHistoryRebuild(pool(), svc, { config: cfg });
+      const first = await runHistoryRebuild(pool(), svc, { userId, config: cfg });
       expect(first.dates).toBe(30); // never more than the bound
       expect(first.pending).toBeGreaterThanOrEqual(1);
       const mid = await request(userId);
@@ -144,7 +145,7 @@ describe('history rebuild (DB)', () => {
       let guard = 0;
       let total = first.dates;
       for (;;) {
-        const r = await runHistoryRebuild(pool(), svc, { config: cfg });
+        const r = await runHistoryRebuild(pool(), svc, { userId, config: cfg });
         total += r.dates;
         if (r.pending === 0 || ++guard > 10) break;
       }
@@ -197,12 +198,21 @@ describe('history rebuild (DB)', () => {
       await seed(other);
       await markHistoryDirty(pool(), userId, day(5));
       await markHistoryDirty(pool(), other, day(5));
+      // Unscoped (what the schedule does): at most `maxUsers` users per invocation, however many are
+      // pending (the shared test DB may hold other files' requests too, so only the bound is exact).
       const r = await runHistoryRebuild(pool(), svc, {
         config: { maxDatesPerUser: 50, maxUsers: 1 },
       });
-      expect(r.users).toBe(1);
-      expect(r.pending).toBeGreaterThanOrEqual(1); // the other one waits for the next run
-      await pool().query('DELETE FROM history_rebuild_requests WHERE user_id = $1', [other]);
+      expect(r.users).toBeLessThanOrEqual(1);
+      expect(r.dates).toBeLessThanOrEqual(50);
+      const left = await pool().query(
+        `SELECT 1 FROM history_rebuild_requests WHERE completed_at IS NULL AND user_id = ANY($1)`,
+        [[userId, other]],
+      );
+      expect(left.rowCount).toBeGreaterThanOrEqual(1); // two were queued, one run did at most one
+      await pool().query('DELETE FROM history_rebuild_requests WHERE user_id = ANY($1)', [
+        [userId, other],
+      ]);
     });
 
     it('skips a user another invocation is rebuilding (advisory lock)', async () => {
@@ -213,6 +223,7 @@ describe('history rebuild (DB)', () => {
       ]);
       try {
         const r = await runHistoryRebuild(pool(), svc, {
+          userId,
           config: { maxDatesPerUser: 50, maxUsers: 5 },
         });
         expect(r.users).toBe(0);
@@ -236,6 +247,7 @@ describe('history rebuild (DB)', () => {
         },
       };
       const r = await runHistoryRebuild(pool(), flaky, {
+        userId,
         log,
         config: { maxDatesPerUser: 50, maxUsers: 5 },
       });

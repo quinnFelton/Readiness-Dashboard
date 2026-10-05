@@ -15,6 +15,23 @@ export interface PoolSsl {
 export interface PoolOptions {
   /** Verify the server against this CA bundle. Default: the file named by PG_SSL_CA_FILE, if set. */
   ssl?: PoolSsl;
+  /**
+   * Called for every NEW connection to get the password. Used for Aurora IAM database
+   * authentication, where the "password" is a short-lived signed token (lambda/db-auth.ts).
+   */
+  password?: () => Promise<string>;
+}
+
+let defaults: PoolOptions = {};
+
+/** Process-wide defaults for the pool, set once at Lambda cold start before the first getPool(). */
+export function configurePool(options: PoolOptions): void {
+  defaults = { ...defaults, ...options };
+}
+
+/** Test hook. */
+export function resetPoolDefaults(): void {
+  defaults = {};
 }
 
 /** Reads PG_SSL_CA_FILE (the RDS bundle shipped next to the Lambda bundle). Undefined = no TLS (local Docker). */
@@ -38,7 +55,10 @@ export function getPool(options: PoolOptions = {}): pg.Pool {
     max: Number(process.env.PG_POOL_MAX ?? 5),
     // Note: the connection string must not carry its own `sslmode`: node-postgres lets it override
     // this option (lambda/bootstrap.ts builds the URL without one).
-    ssl: toPgSsl(options.ssl ?? sslFromEnv()),
+    ssl: toPgSsl(options.ssl ?? defaults.ssl ?? sslFromEnv()),
+    ...((options.password ?? defaults.password)
+      ? { password: options.password ?? defaults.password }
+      : {}),
   });
   return pool;
 }

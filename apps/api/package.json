@@ -18,6 +18,7 @@
     "@aws-sdk/client-kms": "^3.1146.0",
     "@aws-sdk/client-lambda": "^3.1146.0",
     "@aws-sdk/client-secrets-manager": "^3.1146.0",
+    "@aws-sdk/rds-signer": "^3.1146.0",
     "@rd/provider-adapters": "workspace:*",
     "@rd/scoring-engine": "workspace:*",
     "@rd/shared-types": "workspace:*",

@@ -44,6 +44,10 @@ const QUERIES: Record<string, string> = {
        FROM insight_feedback WHERE voted_by = $1 AND user_id <> $1 ORDER BY as_of, classifier_id`,
   athleteEvents: `SELECT id, ${D('date')} AS date, event_type, notes, created_by, created_at
        FROM athlete_events WHERE user_id = $1 ORDER BY date, created_at`,
+  // Bookkeeping for the history rebuild job (which dates still need trend rows).
+  historyRebuildRequests: `SELECT ${D('earliest_date')} AS earliest_date,
+         ${D('cursor_date')} AS cursor_date, requested_at, completed_at
+       FROM history_rebuild_requests WHERE user_id = $1`,
   // Receipts not yet removed by the 30-day sweep (PLAN §13). Includes the stored notification.
   webhookEvents: `SELECT id, provider, payload_jsonb, received_at, processed_at, status, attempts
        FROM webhook_events WHERE user_id = $1 ORDER BY received_at`,

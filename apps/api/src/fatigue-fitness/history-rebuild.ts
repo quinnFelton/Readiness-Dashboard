@@ -134,7 +134,9 @@ export async function runHistoryRebuild(
   }
   out.pending = (
     await pool.query<{ n: number }>(
-      `SELECT count(*)::int AS n FROM history_rebuild_requests WHERE completed_at IS NULL`,
+      `SELECT count(*)::int AS n FROM history_rebuild_requests
+        WHERE completed_at IS NULL AND ($1::uuid IS NULL OR user_id = $1)`,
+      [opts.userId ?? null],
     )
   ).rows[0]!.n;
   return out;

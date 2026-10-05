@@ -102,6 +102,10 @@ async function seed(userId: string, voter: string) {
     [userId, voter],
   );
   await pool().query(
+    `INSERT INTO history_rebuild_requests (user_id, earliest_date) VALUES ($1,'2026-01-01')`,
+    [userId],
+  );
+  await pool().query(
     `INSERT INTO webhook_events (user_id, provider, payload_jsonb, status)
      VALUES ($1,'strava','{"object_id":1}','processed')`,
     [userId],
@@ -233,6 +237,7 @@ describe('data export and full delete (DB)', () => {
         insight_feedback: 'insightFeedbackAbout',
         athlete_events: 'athleteEvents',
         webhook_events: 'webhookEvents',
+        history_rebuild_requests: 'historyRebuildRequests',
       };
       const { rows: tables } = await pool().query<{ table_name: string }>(
         `SELECT DISTINCT c.table_name FROM information_schema.columns c
