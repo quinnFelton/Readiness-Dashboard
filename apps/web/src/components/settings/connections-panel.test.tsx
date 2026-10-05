@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// NOTE: ConnectionsPanel itself cannot be imported under vitest: it uses the `@/` alias and
-// apps/web/vitest.config.ts defines no alias (see docs/reports/6c-test-report.md). These tests
-// cover ProviderCard (status, last sync, connect, disconnect confirmation) directly.
+// These tests cover ProviderCard (status, last sync, connect, disconnect confirmation) directly.
+// ConnectionsPanel itself is covered in connections-panel-integration.test.tsx (integration D added
+// the `@/` alias to vitest.config.ts that it needed).
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { describeStatus, ProviderCard } from './ProviderCard';
