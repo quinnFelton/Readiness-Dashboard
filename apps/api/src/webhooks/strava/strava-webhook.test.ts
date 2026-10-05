@@ -578,7 +578,18 @@ describe('strava webhook', () => {
       // Next 15-minute window: replay picks up the failed event and completes.
       now = new Date('2026-03-01T10:16:00Z');
       fake.setUsage('1,301');
-      const done = await replayStravaEvents(pool(), ingest);
+      // The replay scan is global and this DB is shared with parallel test files: scope it to this
+      // file's user so other files' failed/pending events are not replayed with this file's fake.
+      const scan = `WHERE provider = 'strava' AND user_id IS NOT NULL`;
+      const scoped = {
+        query: (text: string, params?: unknown[]) =>
+          pool().query(
+            text.includes(scan) ? text.replace(scan, `${scan} AND user_id = '${userId}'`) : text,
+            params,
+          ),
+        connect: () => pool().connect(),
+      } as unknown as ReturnType<typeof pool>;
+      const done = await replayStravaEvents(scoped, ingest);
       expect(done).toBeGreaterThanOrEqual(1);
       expect(await effortRows()).toHaveLength(1);
       expect((await eventRows()).every((e) => e.status === 'processed')).toBe(true);

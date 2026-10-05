@@ -6,7 +6,6 @@ import pg from 'pg';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConnectionConfigService } from '../connections/config-service';
-import { ConnectionService } from '../connections/connection-service';
 import { LocalAesGcmCipher } from '../crypto/token-cipher';
 import { ActivityEffortService } from '../efforts/activity-effort-service';
 import { markHistoryDirty } from '../fatigue-fitness/history-rebuild';

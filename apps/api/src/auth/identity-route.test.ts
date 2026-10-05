@@ -98,15 +98,12 @@ describe('POST /auth/login (dev only)', () => {
     const throttled = express();
     throttled.use(express.json());
     throttled.use('/auth', authRouter()); // fresh router = fresh bucket
-    let last = 0;
     let first429 = -1;
     for (let i = 0; i < 15; i++) {
-      last = (
-        await request(throttled)
-          .post('/auth/login')
-          .send({ email, password: `guess${i}` })
-      ).status;
-      if (last === 429 && first429 < 0) first429 = i;
+      const { status } = await request(throttled)
+        .post('/auth/login')
+        .send({ email, password: `guess${i}` });
+      if (status === 429 && first429 < 0) first429 = i;
     }
     expect(first429).toBe(10); // burst of 10 attempts, then 429
     vi.unstubAllEnvs();

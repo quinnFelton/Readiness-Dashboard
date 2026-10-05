@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { StravaAuthError } from '@rd/provider-adapters/strava';
+import type pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StravaIngestService } from '../../providers/strava/strava-ingest-service';
 import { closePool, getPool } from '../../users/pool';
@@ -19,6 +20,21 @@ describe('replayStravaEvents retry cap', () => {
     ({ ingestActivity: vi.fn(fn) }) as unknown as StravaIngestService & {
       ingestActivity: ReturnType<typeof vi.fn>;
     };
+  /**
+   * The replay scan is global (every user's failed/pending Strava events), and this DB is shared with
+   * other test files running in parallel. Scope the scan to this test's user so their events are
+   * neither replayed with a fake ingest nor marked abandoned (same trick as recompute-wiring.test.ts).
+   */
+  const scoped = (): pg.Pool => {
+    const scan = `WHERE provider = 'strava' AND user_id IS NOT NULL`;
+    return {
+      query: (text: string, params?: unknown[]) => {
+        if (text.includes(scan)) text = text.replace(scan, `${scan} AND user_id = '${userId}'`);
+        else if (/FROM webhook_events/.test(text)) throw new Error('replay scan not scoped');
+        return pool().query(text, params);
+      },
+    } as unknown as pg.Pool;
+  };
   const row = async () =>
     (
       await pool().query<{ status: string; attempts: number }>(
@@ -55,15 +71,15 @@ describe('replayStravaEvents retry cap', () => {
       throw new Error('network');
     });
     const opts = { maxAttempts: 3 };
-    await replayStravaEvents(pool(), ingest, opts);
+    await replayStravaEvents(scoped(), ingest, opts);
     expect(await row()).toEqual({ status: 'failed', attempts: 1 });
-    await replayStravaEvents(pool(), ingest, opts);
+    await replayStravaEvents(scoped(), ingest, opts);
     expect(await row()).toEqual({ status: 'failed', attempts: 2 });
-    await replayStravaEvents(pool(), ingest, opts);
+    await replayStravaEvents(scoped(), ingest, opts);
     expect(await row()).toEqual({ status: 'abandoned', attempts: 3 });
 
     ingest.ingestActivity.mockClear();
-    await replayStravaEvents(pool(), ingest, opts);
+    await replayStravaEvents(scoped(), ingest, opts);
     expect(ingest.ingestActivity).not.toHaveBeenCalled();
     expect(await row()).toEqual({ status: 'abandoned', attempts: 3 });
   });
@@ -72,7 +88,7 @@ describe('replayStravaEvents retry cap', () => {
     const ingest = ingestWith(async () => {
       throw new StravaAuthError();
     });
-    await replayStravaEvents(pool(), ingest, { maxAttempts: 5 });
+    await replayStravaEvents(scoped(), ingest, { maxAttempts: 5 });
     expect(await row()).toEqual({ status: 'abandoned', attempts: 1 });
   });
 
@@ -81,7 +97,7 @@ describe('replayStravaEvents retry cap', () => {
       eventId,
     ]);
     const ingest = ingestWith(async () => undefined);
-    await replayStravaEvents(pool(), ingest, { maxAttempts: 5 });
+    await replayStravaEvents(scoped(), ingest, { maxAttempts: 5 });
     expect(ingest.ingestActivity).not.toHaveBeenCalled();
     expect(await row()).toMatchObject({ status: 'abandoned' });
   });
@@ -89,7 +105,7 @@ describe('replayStravaEvents retry cap', () => {
   it('a later success still marks processed (and keeps the attempt count)', async () => {
     await pool().query(`UPDATE webhook_events SET attempts = 2 WHERE id = $1`, [eventId]);
     await replayStravaEvents(
-      pool(),
+      scoped(),
       ingestWith(async () => undefined),
       { maxAttempts: 3 },
     );
