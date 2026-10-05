@@ -3,8 +3,10 @@ import {
   type TrendClassifier,
   createClassifierRegistry,
 } from '@rd/scoring-engine';
+import { defaultRegistry } from '@rd/provider-adapters';
 import { Router } from 'express';
 import type pg from 'pg';
+import { ConnectionConfigService } from '../connections/config-service';
 import { HttpError } from '../connections/errors';
 import { requireSelfOrMaster, requireUser } from '../middleware/rbac';
 import { getPool } from '../users/pool';
@@ -21,7 +23,8 @@ export interface ReadRouterDeps {
 type Kind = 'trends' | 'scores';
 
 /**
- * GET /:userId?range=28d[&classifier=<id>] — serves precomputed rows only.
+ * GET /:userId?range=28d[&classifier=<id>] — serves precomputed rows only (trends also returns
+ * the stored metric `series` behind them; nothing is computed on request, PLAN §8.4).
  * Authorization: requireUser, then requireSelfOrMaster('userId') (403 for another user's id).
  * `?classifier=` for a non-default id is master-only (403 for a plain user).
  */
@@ -29,7 +32,7 @@ function readRouter(kind: Kind, deps: ReadRouterDeps): Router {
   const pool = deps.pool ?? getPool();
   const registry = deps.classifiers ?? createClassifierRegistry();
   const now = deps.now ?? (() => new Date());
-  const service = new TrendService(pool);
+  const service = new TrendService(pool, new ConnectionConfigService(pool, defaultRegistry));
 
   const router = Router();
   router.get('/:userId', requireUser, requireSelfOrMaster('userId'), async (req, res) => {
@@ -44,8 +47,12 @@ function readRouter(kind: Kind, deps: ReadRouterDeps): Router {
     );
     const today = todayUtc(now());
     if (kind === 'trends') {
-      const trends = await service.getTrends(userId, classifierId, days, today);
-      res.json({ userId, classifierId, range: `${days}d`, trends });
+      // `series`: the observations behind the trends, for the charts. Classifier-independent.
+      const [trends, series] = await Promise.all([
+        service.getTrends(userId, classifierId, days, today),
+        service.getSeries(userId, days, today),
+      ]);
+      res.json({ userId, classifierId, range: `${days}d`, trends, series });
     } else {
       const scores = await service.getScores(userId, classifierId, days, today);
       res.json({ userId, classifierId, range: `${days}d`, scores });
