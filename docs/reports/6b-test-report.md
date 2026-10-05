@@ -1,6 +1,6 @@
 # Phase 6b test report
 
-Result: typecheck, lint and the full suite pass (453 tests, 48 files). `pnpm db:migrate` ran clean.
+Result: typecheck, lint and the full suite pass (455 tests, 49 files). `pnpm db:migrate` ran clean.
 
 I added `apps/web/src/app/admin/admin-server.test.tsx`. The author's `admin.test.tsx` and `admin-guard.test.ts` already existed.
 
@@ -16,7 +16,7 @@ I added `apps/web/src/app/admin/admin-server.test.tsx`. The author's `admin.test
 | API 403 surfaces as ApiError | `admin-server.test.tsx` |
 | Nav entry hidden for non-master | `admin.test.tsx` |
 | Classifier table columns and default badge | `admin.test.tsx` |
-| Date-range selector | Only `parseRange` is tested; the links are not |
+| Date-range selector | `range-selector.test.tsx` (renders all ranges, parseRange fallback); link navigation not browser-tested |
 | "Make default" confirmation explains the effect | `admin.test.tsx` |
 | Promote calls PUT with the id URL-encoded | `admin-server.test.tsx` |
 | Derivers list is read-only with a default badge | `admin.test.tsx` |
