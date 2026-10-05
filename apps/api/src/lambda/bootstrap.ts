@@ -1,12 +1,19 @@
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
+import { configurePool } from '../users/pool';
+import { type TokenSigner, iamDatabaseUrl, iamPasswordProvider } from './db-auth';
 
 // Cold-start config for Lambda (PLAN §11/§12). Secrets live in Secrets Manager and are NEVER put in
 // plaintext Lambda env vars (those show up in the console / GetFunctionConfiguration). Instead the
 // CDK stack passes only ARNs:
-//   DB_SECRET_ARN   RDS-managed secret {username,password,host,port,dbname} -> process.env.DATABASE_URL
+//   DB_SECRET_ARN   RDS-managed MASTER secret {username,password,host,port,dbname} -> DATABASE_URL.
+//                   Only the `migrate` function uses it now (it needs DDL).
+//   DB_IAM_USER (+ DB_HOST, DB_PORT, DB_NAME)
+//                   every other function connects as its own least-privilege Postgres role using an
+//                   IAM auth token instead of a password (./db-auth.ts); no DB secret is read.
 //   SECRET_ARNS     comma-separated ARNs of JSON secrets whose keys ARE env var names
 //                   (e.g. {"STRAVA_CLIENT_SECRET": "..."}) -> process.env
-// This runs before the first getPool() call, so apps/api/src/users/pool.ts needs no change.
+// Both DB paths require PG_SSL_CA_FILE: the connection verifies the server against the RDS CA bundle
+// (users/pool.ts). This runs before the first getPool() call.
 //
 // Placeholder values ("REPLACE_ME" / empty) are skipped so an un-filled secret behaves like an
 // unconfigured provider (registerDefaultAdapters tolerates absent credentials) instead of
@@ -21,6 +28,19 @@ export interface SecretsClient {
 export interface BootstrapOptions {
   env?: NodeJS.ProcessEnv;
   client?: SecretsClient;
+  /** Test hook: replaces the RDS IAM token signer. */
+  iamSigner?: TokenSigner;
+}
+
+/**
+ * Fail closed (security review M3): a Lambda that gets its database from AWS must verify the server
+ * certificate, so it must have the RDS CA bundle (infra/cdk ships it next to the bundle). Without
+ * this a missing bundle would silently fall back to an unencrypted or unverified connection.
+ */
+function requireVerifiedTls(env: NodeJS.ProcessEnv): void {
+  if (!env.PG_SSL_CA_FILE) {
+    throw new Error('PG_SSL_CA_FILE (RDS CA bundle) is required to connect to Aurora');
+  }
 }
 
 interface DbSecret {
@@ -46,11 +66,12 @@ export function databaseUrlFromSecret(s: DbSecret): string {
   if (!s.username || !s.password || !s.host) throw new Error('DB secret is missing fields');
   const port = s.port ?? 5432;
   const db = s.dbname ?? 'postgres';
-  // sslmode=no-verify: encrypted in transit inside the VPC without shipping the RDS CA bundle. Tighten
-  // to a pinned CA once pool.ts accepts an `ssl` option (see infra/cdk/README.md "Needs").
+  // No `sslmode` here on purpose (security review M3): node-postgres lets a connection-string
+  // sslmode override the pool's `ssl` option, and `no-verify` used to switch certificate checking
+  // off. TLS with verification comes from users/pool.ts (PG_SSL_CA_FILE = the RDS CA bundle).
   return (
     `postgres://${encodeURIComponent(s.username)}:${encodeURIComponent(s.password)}` +
-    `@${s.host}:${port}/${encodeURIComponent(db)}?sslmode=no-verify`
+    `@${s.host}:${port}/${encodeURIComponent(db)}`
   );
 }
 
@@ -62,11 +83,20 @@ export async function loadSecretsIntoEnv(opts: BootstrapOptions = {}): Promise<v
     .split(',')
     .map((a) => a.trim())
     .filter(Boolean);
+
+  // Per-function database user over IAM auth (db-auth.ts): no DB secret is read at all.
+  if (env.DB_IAM_USER) {
+    requireVerifiedTls(env);
+    env.DATABASE_URL ??= iamDatabaseUrl(env);
+    configurePool({ password: await iamPasswordProvider(env, opts.iamSigner) });
+  }
   if (!dbArn && arns.length === 0) return;
 
   const client = opts.client ?? new SecretsManagerClient({});
 
+  // Master credential from Secrets Manager: only the `migrate` function (DDL) still uses this.
   if (dbArn && !env.DATABASE_URL) {
+    requireVerifiedTls(env);
     env.DATABASE_URL = databaseUrlFromSecret((await readJson(client, dbArn)) as DbSecret);
   }
   for (const arn of arns) {

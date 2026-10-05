@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { signOAuthState, verifyOAuthState } from './oauth-state';
+import { oauthStateSecretFromEnv, signOAuthState, verifyOAuthState } from './oauth-state';
 import { KmsTokenCipher, LocalAesGcmCipher, createTokenCipher } from './token-cipher';
 
 const key = randomBytes(32).toString('base64');
@@ -66,5 +66,33 @@ describe('oauth state', () => {
     expect(verifyOAuthState(s, base, randomBytes(32))).toBe(false);
     expect(verifyOAuthState(undefined, base, secret)).toBe(false);
     expect(verifyOAuthState('a.b.c', base, secret)).toBe(false);
+  });
+
+  // Security review H1: an empty HMAC key used to work, so anyone could forge a valid state.
+  it('fails closed on an empty or short secret (sign AND verify)', () => {
+    const forged = signOAuthState(base, secret);
+    for (const weak of [Buffer.alloc(0), randomBytes(31)]) {
+      expect(() => signOAuthState(base, weak)).toThrow(/at least 32 bytes/);
+      expect(() => verifyOAuthState(forged, base, weak)).toThrow(/at least 32 bytes/);
+    }
+  });
+
+  it('oauthStateSecretFromEnv: prod needs its own OAUTH_STATE_SECRET; dev derives a separate key', () => {
+    const tokenKey = randomBytes(32).toString('base64');
+    expect(() => oauthStateSecretFromEnv({ NODE_ENV: 'production' })).toThrow(/OAUTH_STATE_SECRET/);
+    // The AES token key must not stand in for it in production.
+    expect(() =>
+      oauthStateSecretFromEnv({ NODE_ENV: 'production', TOKEN_ENCRYPTION_KEY: tokenKey }),
+    ).toThrow(/OAUTH_STATE_SECRET/);
+    expect(() => oauthStateSecretFromEnv({ OAUTH_STATE_SECRET: 'short' })).toThrow(/32 bytes/);
+    expect(
+      oauthStateSecretFromEnv({ OAUTH_STATE_SECRET: 'x'.repeat(48), NODE_ENV: 'production' }),
+    ).toHaveLength(48);
+
+    const dev = oauthStateSecretFromEnv({ TOKEN_ENCRYPTION_KEY: tokenKey });
+    expect(dev).toHaveLength(32);
+    expect(dev.equals(Buffer.from(tokenKey, 'base64'))).toBe(false); // no key reuse
+    expect(oauthStateSecretFromEnv({ TOKEN_ENCRYPTION_KEY: tokenKey }).equals(dev)).toBe(true);
+    expect(() => oauthStateSecretFromEnv({})).toThrow(/32 bytes/);
   });
 });

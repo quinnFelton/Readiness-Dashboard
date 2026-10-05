@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import serverless from 'serverless-http';
 import { WEBHOOK_PROVIDERS, type WebhookProvider, createApp } from '../app';
+import { REPLAY_HINT_HEADER } from '../webhooks/strava/routes';
 import { ensureBootstrapped } from './bootstrap';
 
 // PLAN §11: webhook receivers are separate Lambdas so each role holds only its own provider's
@@ -39,12 +40,19 @@ export async function kickStravaReplay(
   statusCode: number | undefined,
   env: NodeJS.ProcessEnv = process.env,
   invoker?: LambdaInvoker,
+  /**
+   * Response headers. When given, the replay is kicked only if the router flagged a still-pending
+   * event (security review M4: forged / duplicate / unknown-owner POSTs answer 200 too and must not
+   * each start a Lambda). Omit to keep the older "any 200 POST" behaviour.
+   */
+  headers?: Record<string, unknown>,
 ): Promise<boolean> {
   const fn = env.STRAVA_REPLAY_FUNCTION;
   const isStravaPost =
     event.requestContext?.http?.method === 'POST' &&
     event.rawPath?.startsWith('/api/v1/webhooks/strava');
   if (!fn || !isStravaPost || statusCode !== 200) return false;
+  if (headers !== undefined && String(headers[REPLAY_HINT_HEADER]) !== '1') return false;
   try {
     const { LambdaClient, InvokeCommand } = await import('@aws-sdk/client-lambda');
     await (invoker ?? new LambdaClient({})).send(
@@ -69,7 +77,18 @@ export const handler: Handler = async (event, context) => {
   inner ??= serverless(
     createWebhooksApp((process.env.WEBHOOK_PROVIDERS ?? '').split(',').map((s) => s.trim())),
   );
-  const result = (await inner(event, context)) as { statusCode?: number };
-  await kickStravaReplay(event as HttpEvent, result.statusCode);
+  const result = (await inner(event, context)) as {
+    statusCode?: number;
+    headers?: Record<string, unknown>;
+  };
+  await kickStravaReplay(
+    event as HttpEvent,
+    result.statusCode,
+    process.env,
+    undefined,
+    result.headers ?? {},
+  );
+  // The hint is for this wrapper only; do not hand it to Strava.
+  if (result.headers) delete result.headers[REPLAY_HINT_HEADER];
   return result;
 };

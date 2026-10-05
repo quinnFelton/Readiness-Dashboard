@@ -443,7 +443,8 @@ describe('connection framework', () => {
       expect(await count('daily_metrics', a)).toBe(1);
       expect((await configs.getConfig(a)).activitySource).toBe('strava');
 
-      // client-supplied user ids are ignored
+      // client-supplied user ids are ignored (B must have terra connected to select it: phase 9)
+      await conns.saveGrant(b, 'terra', 'daily_metrics_source', { externalUserId: 'tb' });
       await request(app)
         .put('/connections/config')
         .set('Authorization', bearer(b))
@@ -467,6 +468,18 @@ describe('connection framework', () => {
         .set(auth)
         .send({ dailyMetricsSources: ['strava'] })
         .expect(400);
+      // A provider can only be selected while connected (phase 9, settings item): refused first...
+      const refused = await request(app)
+        .put('/connections/config')
+        .set(auth)
+        .send({ activitySource: 'strava', dailyMetricsSources: ['terra', 'oura'] })
+        .expect(400);
+      expect(refused.body.error).toMatch(/connect a provider/);
+      expect(await count('connection_configs', a)).toBe(0); // nothing was half-applied
+      // ...and accepted once connected.
+      await conns.saveGrant(a, 'strava', 'activity_source', { accessToken: 't' });
+      await conns.saveGrant(a, 'terra', 'daily_metrics_source', { externalUserId: 'ta' });
+      await conns.saveGrant(a, 'oura', 'daily_metrics_source', { accessToken: 't' });
       const put = await request(app)
         .put('/connections/config')
         .set(auth)
@@ -479,6 +492,43 @@ describe('connection framework', () => {
       expect(put.body.precedence.hrv).toEqual(['terra', 'oura']);
       const get = await request(app).get('/connections/config').set(auth).expect(200);
       expect(get.body.config).toEqual(put.body.config);
+    });
+
+    it('config: an already-selected provider stays editable after its connection lapses; new ones need a connection', async () => {
+      const auth = { Authorization: bearer(a) };
+      await conns.saveGrant(a, 'oura', 'daily_metrics_source', { accessToken: 't' });
+      await conns.saveGrant(a, 'terra', 'daily_metrics_source', { externalUserId: 'ta' });
+      await request(app)
+        .put('/connections/config')
+        .set(auth)
+        .send({ dailyMetricsSources: ['oura', 'terra'] })
+        .expect(200);
+      // The Terra connection goes inactive (e.g. a deauth webhook). Selection survives; re-ordering
+      // and deselecting must still work, but nothing unconnected can be ADDED.
+      await pool().query(
+        `UPDATE provider_connections SET is_active = false WHERE user_id=$1 AND provider='terra'`,
+        [a],
+      );
+      await request(app)
+        .put('/connections/config')
+        .set(auth)
+        .send({ dailyMetricsSources: ['terra', 'oura'] })
+        .expect(200);
+      await request(app)
+        .put('/connections/config')
+        .set(auth)
+        .send({ dailyMetricsSources: ['oura'] })
+        .expect(200);
+      await request(app) // terra is no longer selected AND not connected: refused
+        .put('/connections/config')
+        .set(auth)
+        .send({ dailyMetricsSources: ['oura', 'terra'] })
+        .expect(400);
+      await request(app) // and strava was never connected
+        .put('/connections/config')
+        .set(auth)
+        .send({ activitySource: 'strava' })
+        .expect(400);
     });
 
     it('DELETE with deleteData=true removes the connection and derived rows via the route', async () => {

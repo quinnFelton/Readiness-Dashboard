@@ -26,6 +26,19 @@ export function usersRouter(): Router {
         `SELECT user_id, provider, role, last_synced_at
            FROM provider_connections WHERE is_active ORDER BY provider`,
       );
+      // Latest fatigue/fitness state per athlete in ONE query (PLAN §13: DISTINCT ON against
+      // `trends` is cheap at this scale). The admin roster used to call /trends/:id once per user.
+      // Same meaning as that route: the DEFAULT classifier's state rows from the last 28 days.
+      const latest = await pool.query<{ user_id: string; state: string | null; as_of: string }>(
+        `SELECT DISTINCT ON (t.user_id)
+                t.user_id, t.direction AS state, to_char(t.as_of, 'YYYY-MM-DD') AS as_of
+           FROM trends t
+          WHERE t.metric_type = 'fatigue_fitness_state' AND t.trend_window = '7d'
+            AND t.classifier_id = (SELECT id FROM classifiers WHERE is_default)
+            AND t.as_of > (now() AT TIME ZONE 'utc')::date - 28
+          ORDER BY t.user_id, t.as_of DESC, t.flagged_at DESC`,
+      );
+      const latestByUser = new Map(latest.rows.map((r) => [r.user_id, r]));
       res.json({
         users: users.map((u) => {
           const connections = rows
@@ -41,7 +54,15 @@ export function usersRouter(): Router {
               .filter((x): x is string => !!x)
               .sort()
               .at(-1) ?? null;
-          return { ...u, connections, lastSyncAt };
+          const state = latestByUser.get(u.id);
+          return {
+            ...u,
+            connections,
+            lastSyncAt,
+            // null (not absent) = "no state yet", so the web roster does not fall back to N requests.
+            latestState: state?.state ?? null,
+            latestStateAsOf: state?.as_of ?? null,
+          };
         }),
       });
     } catch (err) {

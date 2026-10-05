@@ -1,7 +1,7 @@
 import { type AdapterRegistry, defaultRegistry } from '@rd/provider-adapters';
 import { type ErrorRequestHandler, Router } from 'express';
 import type pg from 'pg';
-import { signOAuthState, verifyOAuthState } from '../crypto/oauth-state';
+import { oauthStateSecretFromEnv, signOAuthState, verifyOAuthState } from '../crypto/oauth-state';
 import { type TokenCipher, createTokenCipher } from '../crypto/token-cipher';
 import { requireUser } from '../middleware/rbac';
 import { getPool } from '../users/pool';
@@ -13,7 +13,7 @@ export interface ConnectionsDeps {
   pool?: pg.Pool;
   registry?: AdapterRegistry;
   cipher?: TokenCipher;
-  /** Secret for signing OAuth state; defaults to TOKEN_ENCRYPTION_KEY bytes. */
+  /** Secret for signing OAuth state (>= 32 bytes); defaults to oauthStateSecretFromEnv(). */
   stateSecret?: Buffer;
   nowSec?: () => number;
 }
@@ -30,8 +30,7 @@ export function connectionsRouter(deps: ConnectionsDeps = {}): Router {
   const nowSec = deps.nowSec ?? (() => Math.floor(Date.now() / 1000));
   let cipher = deps.cipher;
   const getCipher = () => (cipher ??= createTokenCipher());
-  const stateSecret = () =>
-    deps.stateSecret ?? Buffer.from(process.env.TOKEN_ENCRYPTION_KEY ?? '', 'base64');
+  const stateSecret = () => deps.stateSecret ?? oauthStateSecretFromEnv();
 
   const configs = new ConnectionConfigService(pool, registry);
   const connections = () => new ConnectionService(pool, registry, getCipher(), configs);
@@ -89,6 +88,23 @@ export function connectionsRouter(deps: ConnectionsDeps = {}): Router {
         400,
         'expected activitySource (string|null) and/or dailyMetricsSources (string[])',
       );
+    }
+    // Settings item: a provider can only be NEWLY selected while it is actively connected for this
+    // user (the UI disables the control, but the UI is never the control: CLAUDE.md rule 3).
+    // Providers already in the saved config stay allowed, so reordering precedence or deselecting a
+    // source whose token has since expired still works.
+    const [list, current] = await Promise.all([
+      connections().list(userId),
+      configs.getConfig(userId),
+    ]);
+    const connected = new Set(list.filter((c) => c.isActive).map((c) => c.provider));
+    const kept = new Set([current.activitySource, ...current.dailyMetricsSources]);
+    const wanted = [
+      ...(typeof activitySource === 'string' ? [activitySource] : []),
+      ...((dailyMetricsSources as string[] | undefined) ?? []),
+    ];
+    if (wanted.some((p) => !connected.has(p) && !kept.has(p))) {
+      throw new HttpError(400, 'connect a provider before selecting it');
     }
     if (activitySource !== undefined) await configs.setActivitySource(userId, activitySource);
     if (dailyMetricsSources !== undefined) {

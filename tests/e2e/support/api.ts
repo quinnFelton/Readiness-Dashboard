@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import type { APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext } from '@playwright/test';
 import { API_URL, NEXTAUTH_SECRET } from './env';
 
 // Direct API access for RBAC assertions that must not go through the web app. Mirrors what
@@ -26,21 +26,37 @@ export interface ApiUser {
   role: 'user' | 'master';
 }
 
-/** Looks up seeded accounts via GET /users as the master (the only role allowed to list them). */
-export async function listUsers(request: APIRequestContext): Promise<ApiUser[]> {
-  // The master's id is needed to mint its token; the API reads the role from the DB, so any
-  // existing id works as `sub` for the lookup, but we need a real master: find it via /users/me
-  // is circular, so bootstrap from the DB-independent route: the login endpoint.
-  const login = await request.post(`${API_URL}/api/v1/auth/login`, {
-    data: {
-      email: 'master@example.test',
-      password: process.env.AUTH_DEV_PASSWORD ?? 'e2e-password',
-    },
+let cachedUsers: Promise<ApiUser[]> | undefined;
+
+/**
+ * Looks up seeded accounts via GET /users as the master (the only role allowed to list them).
+ * The master's id comes from the dev login route, which is throttled per client (10 attempts, then
+ * one every 2 s), so the list is fetched once per worker and a throttled login is retried.
+ */
+export function listUsers(request: APIRequestContext): Promise<ApiUser[]> {
+  cachedUsers ??= fetchUsers(request).catch((err: unknown) => {
+    cachedUsers = undefined;
+    throw err;
   });
-  const { user: master } = (await login.json()) as { user: ApiUser };
+  return cachedUsers;
+}
+
+async function fetchUsers(request: APIRequestContext): Promise<ApiUser[]> {
+  let master: ApiUser | undefined;
+  await expect(async () => {
+    const login = await request.post(`${API_URL}/api/v1/auth/login`, {
+      data: {
+        email: 'master@example.test',
+        password: process.env.AUTH_DEV_PASSWORD ?? 'e2e-password',
+      },
+    });
+    expect(login.status(), 'dev login as the seeded master').toBe(200);
+    master = ((await login.json()) as { user: ApiUser }).user;
+  }).toPass({ timeout: 30_000 });
   const res = await request.get(`${API_URL}/api/v1/users`, {
-    headers: { authorization: `Bearer ${mintApiToken(master)}` },
+    headers: { authorization: `Bearer ${mintApiToken(master!)}` },
   });
+  expect(res.status(), 'GET /users as master').toBe(200);
   return ((await res.json()) as { users: ApiUser[] }).users;
 }
 

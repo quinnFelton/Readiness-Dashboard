@@ -3,6 +3,7 @@ import type {
   CallbackContext,
   ConnectionGrant,
   ProviderAdapter,
+  RevokeContext,
   StartContext,
   StartResult,
 } from '../types';
@@ -36,6 +37,10 @@ export function createTerraAdapter(cfg: TerraAdapterConfig): TerraAdapter {
     client,
 
     normalize: (raw) => normalizeTerraPayload(raw, 'terra'),
+
+    async revoke({ externalUserId }: RevokeContext): Promise<void> {
+      if (externalUserId) await client.deauthenticateUser(externalUserId);
+    },
 
     async start({ userId, state }: StartContext): Promise<StartResult> {
       // reference_id = internal user id, so webhooks map back without a lookup table (PLAN §5.3).

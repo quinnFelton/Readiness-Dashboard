@@ -12,15 +12,21 @@ test.describe.configure({ mode: 'serial' });
 const heroChart = (page: Page) =>
   page.getByRole('figure', { name: /EF peak-20 against HRV and resting HR/ });
 
-// The legend always lists the three series, so read the plotted data instead: hover the plot and
-// look at the tooltip.
-async function hoverChart(page: Page) {
+// The legend names a series, so read the plotted data instead: sweep the pointer across the plot
+// and collect what the tooltip shows. The series are sparse and the plot's width depends on which
+// axes are drawn, so no single x position is guaranteed to sit on a point.
+async function tooltipTexts(page: Page): Promise<string> {
   await page.goto('/dashboard');
   const chart = heroChart(page);
   await expect(chart).toBeVisible();
-  const box = await chart.locator('svg').first().boundingBox();
-  await page.mouse.move(box!.x + box!.width - 60, box!.y + box!.height / 2);
-  return chart;
+  const box = (await chart.locator('svg').first().boundingBox())!;
+  const seen: string[] = [];
+  const steps = 60;
+  for (let i = 1; i < steps; i++) {
+    await page.mouse.move(box.x + (box.width * i) / steps, box.y + box.height / 2);
+    seen.push(await chart.innerText());
+  }
+  return seen.join('\n');
 }
 
 async function openDisconnectDialog(page: Page, name: string) {
@@ -73,9 +79,9 @@ test.describe('disconnect Strava, keeping the history', () => {
   test('after: the Strava rides, the state and the readiness score are still on the dashboard', async ({
     page,
   }) => {
-    const chart = await hoverChart(page);
-    await expect(chart.getByText(/^EF peak-20: \d+\.\d{2} W\/bpm$/)).toBeVisible();
-    await expect(chart.getByText(/^HRV: /)).toBeVisible();
+    const shown = await tooltipTexts(page);
+    expect(shown).toMatch(/EF peak-20: \d+\.\d{2} W\/bpm/);
+    expect(shown).toMatch(/HRV: \d/);
     await expect(page.getByRole('region', { name: 'Current state' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Readiness score' })).toBeVisible();
   });
@@ -97,10 +103,10 @@ test.describe('disconnect Oura and delete its data', () => {
 
   test('after: the Oura series are gone from the dashboard chart', async ({ page }) => {
     // The Strava rides were kept above, so EF is still plotted; Oura's HRV / resting HR are not.
-    const chart = await hoverChart(page);
-    await expect(chart.getByText(/^EF peak-20: \d+\.\d{2} W\/bpm$/)).toBeVisible();
-    await expect(chart.getByText(/^HRV: /)).toHaveCount(0);
-    await expect(chart.getByText(/^Resting HR: /)).toHaveCount(0);
+    const shown = await tooltipTexts(page);
+    expect(shown).toMatch(/EF peak-20: \d+\.\d{2} W\/bpm/);
+    expect(shown).not.toMatch(/HRV: /);
+    expect(shown).not.toMatch(/Resting HR: /);
   });
 
   test('after: the readiness score derived from Oura is gone from the dashboard', async ({

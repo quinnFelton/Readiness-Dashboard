@@ -32,8 +32,9 @@ interface TokenRow {
 
 /**
  * Fetches exactly one activity (+ streams only if it passes the pre-filter) for a connected user
- * and hands it to ActivityEffortService. Strava has no webhook signature, so this only ever *pulls*
- * from Strava with the user's own token: a forged event can at worst trigger a re-fetch.
+ * and hands it to ActivityEffortService. Strava has no webhook signature, so every event is only a
+ * hint: this pulls from Strava with the user's own token and acts on what Strava says, never on the
+ * event (a forged event costs one re-fetch; `delete` and deauthorization are confirmed first, H2).
  */
 export class StravaIngestService {
   private readonly now: () => Date;
@@ -171,7 +172,27 @@ export class StravaIngestService {
     return rows.map((r) => r.date);
   }
 
-  /** Athlete deauthorized the app (event `updates.authorized = "false"`): drop credentials. */
+  /**
+   * A deauthorization event is only a hint (anyone can POST one: security review H2). Disconnect
+   * only if Strava itself rejects the user's credentials: a refresh that fails with an auth error
+   * (getAccessToken deactivates the row) or a 401 from GET /athlete. Returns whether it disconnected.
+   * Transient errors (network, 5xx, rate limit) propagate so the event is retried, not trusted.
+   */
+  async confirmDeauthorized(userId: string): Promise<boolean> {
+    try {
+      const token = await this.getAccessToken(userId);
+      await this.d.client.getAthlete(token);
+      return false; // the grant still works: the event was stale or forged
+    } catch (err) {
+      if (err instanceof StravaAuthError) {
+        await this.markDeauthorized(userId);
+        return true;
+      }
+      throw err;
+    }
+  }
+
+  /** Drops credentials and deactivates the connection. Call only after confirming (see above). */
   async markDeauthorized(userId: string): Promise<void> {
     await this.d.pool.query(
       `UPDATE provider_connections

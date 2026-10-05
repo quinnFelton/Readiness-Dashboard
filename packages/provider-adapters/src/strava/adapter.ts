@@ -4,6 +4,7 @@ import type {
   CallbackContext,
   ConnectionGrant,
   ProviderAdapter,
+  RevokeContext,
   StartContext,
   StartResult,
 } from '../types';
@@ -69,6 +70,11 @@ export function createStravaAdapter(
 
     async start(ctx: StartContext): Promise<StartResult> {
       return { redirectUrl: cfg.client.authorizeUrl(ctx.state) };
+    },
+
+    async revoke({ refreshToken, accessToken }: RevokeContext): Promise<void> {
+      const token = refreshToken ?? accessToken;
+      if (token) await cfg.client.revoke(token);
     },
 
     async handleCallback(ctx: CallbackContext): Promise<ConnectionGrant> {
