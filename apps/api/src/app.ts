@@ -60,7 +60,12 @@ export function createApp(opts: CreateAppOptions = {}): Express {
     if (providers.has('oura')) webhooks.use('/oura', createOuraWebhookRouter());
     app.use('/api/v1/webhooks', webhooks);
   }
-  if (mount === 'webhooks') return app;
+  if (mount === 'webhooks') {
+    // Errors the routers' own handlers don't catch (a malformed raw body, say) must not reach Express's
+    // default handler, which prints the stack and can quote payload fragments (security review L3).
+    app.use(safeErrorHandler);
+    return app;
+  }
 
   app.use(express.json());
 
