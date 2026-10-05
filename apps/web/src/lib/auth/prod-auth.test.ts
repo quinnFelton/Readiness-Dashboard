@@ -201,13 +201,13 @@ describe('runtime secrets (no secret in build artifacts)', () => {
   });
 
   it('does nothing (and loads no AWS SDK) when RUNTIME_SECRET_ARNS is unset: local dev, tests, e2e', async () => {
-    const env: NodeJS.ProcessEnv = {};
+    const env: Record<string, string | undefined> = {};
     await loadRuntimeSecrets(env, client({}));
     expect(env).toEqual({});
   });
 
   it('copies allowed keys into env (NEXTAUTH_SECRET also becomes AUTH_SECRET), skipping placeholders and extras', async () => {
-    const env: NodeJS.ProcessEnv = { RUNTIME_SECRET_ARNS: arn };
+    const env: Record<string, string | undefined> = { RUNTIME_SECRET_ARNS: arn };
     const c = client({
       [arn]: {
         NEXTAUTH_SECRET: 's3cret-value',
@@ -224,7 +224,10 @@ describe('runtime secrets (no secret in build artifacts)', () => {
   });
 
   it('never overwrites a value already in the environment, and memoises per process', async () => {
-    const env: NodeJS.ProcessEnv = { RUNTIME_SECRET_ARNS: arn, NEXTAUTH_SECRET: 'from-env' };
+    const env: Record<string, string | undefined> = {
+      RUNTIME_SECRET_ARNS: arn,
+      NEXTAUTH_SECRET: 'from-env',
+    };
     const c = client({ [arn]: { NEXTAUTH_SECRET: 'from-secret' } });
     await loadRuntimeSecrets(env, c);
     await loadRuntimeSecrets(env, c);
@@ -233,7 +236,7 @@ describe('runtime secrets (no secret in build artifacts)', () => {
   });
 
   it('a failed load is retried and never echoes secret material', async () => {
-    const env: NodeJS.ProcessEnv = { RUNTIME_SECRET_ARNS: arn };
+    const env: Record<string, string | undefined> = { RUNTIME_SECRET_ARNS: arn };
     const bad = { send: vi.fn(async () => ({ SecretString: 'not-json-hunter2' })) };
     const err = await loadRuntimeSecrets(env, bad).catch((e: Error) => e);
     expect(String(err)).not.toContain('hunter2');
