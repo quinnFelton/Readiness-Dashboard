@@ -3,6 +3,7 @@ import { ConnectionConfigService } from '../connections/config-service';
 import { addDays, isIsoDate, todayUtc } from '../trends/http';
 import { getPool } from '../users/pool';
 import { loadFatigueFitnessConfig } from './config';
+import { markHistoryDirty, oldestOutsideWindow } from './history-rebuild';
 import { FatigueFitnessService, type SyncKind } from './service';
 
 // PLAN §8.4: trends / readiness_scores are computed when data arrives (sync, webhook, disconnect),
@@ -28,6 +29,8 @@ export interface RecomputeOptions {
    */
   maxBackDays?: number;
   log?: (message: string) => void;
+  /** Called with the oldest touched date that fell outside the window; see history-rebuild.ts. */
+  markHistoryDirty?: (userId: string, oldestDate: string) => Promise<void>;
 }
 
 /** Today plus the distinct valid `dates` in (today - maxBackDays, today], oldest first. */
@@ -55,13 +58,19 @@ export function createRecompute(
   const get = typeof svc === 'function' ? svc : () => svc;
   const now = opts.now ?? (() => new Date());
   const log = opts.log ?? ((m: string) => console.warn(m));
-  return async (userId, kind, dates) => {
+  return async (userId, kind, rawDates) => {
     try {
       const maxBack = opts.maxBackDays ?? loadFatigueFitnessConfig().longDays;
       const service = get();
-      for (const day of recomputeDates(dates, todayUtc(now()), maxBack)) {
+      const today = todayUtc(now());
+      const dates = rawDates ? [...rawDates] : undefined; // iterated twice below
+      for (const day of recomputeDates(dates, today, maxBack)) {
         await service.onSyncComplete(userId, kind, day);
       }
+      // Dates older than the window (a Terra 90-day backfill, an old Strava ride) get no rows here;
+      // ask the history rebuild job to fill them in (history-rebuild.ts, owner decision 2026-10-04).
+      const oldest = oldestOutsideWindow(dates, today, maxBack);
+      if (oldest && opts.markHistoryDirty) await opts.markHistoryDirty(userId, oldest);
     } catch (err) {
       log(`fatigue-fitness recompute failed: ${err instanceof Error ? err.name : 'Error'}`);
     }
@@ -76,13 +85,19 @@ let sharedHook: Recompute | undefined;
  * lazyStravaIngest), so routers can be mounted at startup without DB/env.
  */
 export function sharedRecompute(): Recompute {
-  sharedHook ??= createRecompute(() => {
-    if (!shared) {
-      const pool = getPool();
-      shared = new FatigueFitnessService(pool, new ConnectionConfigService(pool, defaultRegistry));
-    }
-    return shared;
-  });
+  sharedHook ??= createRecompute(
+    () => {
+      if (!shared) {
+        const pool = getPool();
+        shared = new FatigueFitnessService(
+          pool,
+          new ConnectionConfigService(pool, defaultRegistry),
+        );
+      }
+      return shared;
+    },
+    { markHistoryDirty: (userId, oldest) => markHistoryDirty(getPool(), userId, oldest) },
+  );
   return sharedHook;
 }
 

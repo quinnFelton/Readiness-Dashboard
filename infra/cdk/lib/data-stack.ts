@@ -23,11 +23,15 @@ export interface AppSecrets {
   db: secretsmanager.ISecret;
   /** {NEXTAUTH_SECRET} — shared by the web app (mints HS256 API tokens) and the API (verifies them). */
   nextauth: secretsmanager.ISecret;
+  /** {OAUTH_STATE_SECRET} — HMAC key for the signed OAuth state (REST API only). */
+  oauthState: secretsmanager.ISecret;
   /** {KMS_ENCRYPTED_DATA_KEY} — envelope data key, KMS-encrypted (not secret on its own). */
   tokenKey: secretsmanager.ISecret;
   oura: secretsmanager.ISecret;
   strava: secretsmanager.ISecret;
   terra: secretsmanager.ISecret;
+  /** {AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET} — web sign-in; read by the web compute role only. */
+  googleOauth: secretsmanager.ISecret;
   /** GitHub token Amplify uses to pull the repo. */
   githubToken: secretsmanager.ISecret;
 }
@@ -131,10 +135,26 @@ export class DataStack extends Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [this.dbSg],
       storageEncrypted: true,
+      // Every function except `migrate` logs in as its own Postgres role with an IAM token (no
+      // password). Requires TLS, which every client already verifies (pool.ts).
+      // https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/UsingWithRDS.IAMDBAuth.html
+      iamAuthentication: true,
       backup: { retention: Duration.days(config.db.backupDays) },
       deletionProtection: config.isProd,
       removalPolicy: config.isProd ? RemovalPolicy.SNAPSHOT : RemovalPolicy.DESTROY,
     });
+
+    // Master password rotation (stage E item). Now that only `migrate` holds the master credential and
+    // reads it from Secrets Manager on every run, rotating it is safe: nothing caches it. A hosted
+    // rotation Lambda runs in the app subnets (they have NAT egress to reach Secrets Manager; the
+    // isolated DB subnets do not). It wakes Aurora once per interval, which costs nothing noticeable.
+    // https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_turn-on-for-db.html
+    if (config.db.rotationDays > 0) {
+      this.cluster.addRotationSingleUser({
+        automaticallyAfter: Duration.days(config.db.rotationDays),
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      });
+    }
 
     // ---- Secrets Manager entries ---------------------------------------------------------------
     const name = (n: string) => `${config.secretPrefix}/${n}`;
@@ -148,6 +168,19 @@ export class DataStack extends Stack {
       generateSecretString: {
         secretStringTemplate: '{}',
         generateStringKey: 'NEXTAUTH_SECRET',
+        passwordLength: 48,
+        excludePunctuation: true,
+      },
+      removalPolicy: removal,
+    });
+    // Security review H1: OAuth `state` is the connect flow's only CSRF control, so it gets its own
+    // generated key (>= 32 bytes; the API fails closed below that). Only the REST API reads it.
+    const oauthState = new secretsmanager.Secret(this, 'OAuthStateSecret', {
+      secretName: name('oauth-state'),
+      description: 'OAUTH_STATE_SECRET: HMAC key for the signed OAuth state, read by the API only',
+      generateSecretString: {
+        secretStringTemplate: '{}',
+        generateStringKey: 'OAUTH_STATE_SECRET',
         passwordLength: 48,
         excludePunctuation: true,
       },
@@ -194,6 +227,14 @@ export class DataStack extends Stack {
       secretObjectValue: placeholders(['TERRA_DEV_ID', 'TERRA_API_KEY', 'TERRA_SIGNING_SECRET']),
       removalPolicy: removal,
     });
+    // Production sign-in (security review H3). Read ONLY by the web app's SSR compute role, never
+    // by a Lambda: the API has no use for the Google client secret.
+    const googleOauth = new secretsmanager.Secret(this, 'GoogleOAuthSecret', {
+      secretName: name('google-oauth'),
+      description: 'Google OAuth client for web sign-in (AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET)',
+      secretObjectValue: placeholders(['AUTH_GOOGLE_ID', 'AUTH_GOOGLE_SECRET']),
+      removalPolicy: removal,
+    });
     const githubToken = new secretsmanager.Secret(this, 'GithubTokenSecret', {
       secretName: name('github-token'),
       description: 'GitHub access token Amplify uses to clone the repo (JSON: {"token": "..."})',
@@ -204,10 +245,12 @@ export class DataStack extends Stack {
     this.secrets = {
       db: this.cluster.secret!,
       nextauth,
+      oauthState,
       tokenKey,
       oura,
       strava,
       terra,
+      googleOauth,
       githubToken,
     };
 

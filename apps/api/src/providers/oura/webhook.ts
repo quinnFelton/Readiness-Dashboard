@@ -259,7 +259,9 @@ export function createOuraWebhookRouter(overrides: Partial<OuraWebhookDeps> = {}
           })
         : { ok: false as const, reason: 'missing_header' as const };
       if (!check.ok) {
-        res.status(401).json({ error: check.reason ?? 'unauthorized' });
+        // Generic on purpose (security review L2): the reason (bad signature vs stale timestamp)
+        // would tell a forger which part of their attempt was wrong.
+        res.status(401).json({ error: 'unauthorized' });
         return;
       }
 
@@ -300,8 +302,11 @@ export function createOuraWebhookRouter(overrides: Partial<OuraWebhookDeps> = {}
         const name = err instanceof Error ? err.name : 'error';
         const msg = err instanceof Error ? err.message : '';
         if (receiptId) await finishReceipt(d.pool, receiptId, 'failed', name);
-        // 5xx => Oura retries (docs: 10 retries). Name only in the body: messages may embed payload bits.
-        res.status(msg === 'SyncInProgress' ? 503 : 500).json({ error: name });
+        // 5xx => Oura retries (docs: 10 retries). The body is generic (security review L2); the
+        // class name lives in the receipt and logs only. Messages may embed payload bits.
+        res
+          .status(msg === 'SyncInProgress' ? 503 : 500)
+          .json({ error: msg === 'SyncInProgress' ? 'busy' : 'processing failed' });
       }
     },
   );

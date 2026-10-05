@@ -1,5 +1,13 @@
 import { fileURLToPath } from 'node:url';
-import { CfnOutput, Duration, RemovalPolicy, Stack, type StackProps } from 'aws-cdk-lib';
+import {
+  ArnFormat,
+  CfnOutput,
+  Duration,
+  RemovalPolicy,
+  Stack,
+  type StackProps,
+  Token,
+} from 'aws-cdk-lib';
 import * as apigwv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import { HttpLambdaIntegration } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as apigw from 'aws-cdk-lib/aws-apigateway';
@@ -26,7 +34,7 @@ export interface ApiStackProps extends StackProps {
 const repoPath = (rel: string) => fileURLToPath(new URL(`../../../${rel}`, import.meta.url));
 const lambdaEntry = (name: string) => repoPath(`apps/api/src/lambda/${name}.ts`);
 
-type SecretKey = 'db' | 'nextauth' | 'tokenKey' | 'oura' | 'strava' | 'terra';
+type SecretKey = 'nextauth' | 'oauthState' | 'tokenKey' | 'oura' | 'strava' | 'terra';
 
 interface FnSpec {
   /** Construct id and function-name suffix. */
@@ -35,6 +43,13 @@ interface FnSpec {
   description: string;
   /** In the VPC (needs Aurora). Only oura-subscriptions is outside: it never touches the DB. */
   vpc: boolean;
+  /**
+   * How the function logs in to Aurora. `{ user }`: its own least-privilege Postgres role over IAM
+   * database authentication (no password; rds-db:connect for that one user only). `'master'`: the
+   * Secrets Manager master credential, used ONLY by `migrate` (DDL). Both verify the server against the
+   * RDS CA bundle shipped with the function. Omit for functions that never touch the DB.
+   */
+  db?: 'master' | { user: string };
   timeout: Duration;
   memoryMb: number;
   /** Secrets this function's role may read (and that are loaded into its env at cold start). */
@@ -53,7 +68,7 @@ interface FnSpec {
  * (security group) plus the DB secret; there is no IAM database auth.
  *
  *   function              secrets read                          kms:Decrypt  VPC  invoked by
- *   api                   db nextauth token-key oura strava terra   yes       yes  HTTP API (catch-all)
+ *   api                   db nextauth oauth-state token-key oura strava terra   yes   yes  HTTP API (catch-all)
  *   webhook-terra         db terra token-key                    yes          yes  HTTP API /webhooks/terra
  *   webhook-strava        db strava token-key (+invoke replay)  yes          yes  HTTP API /webhooks/strava
  *   webhook-oura          db oura token-key                     yes          yes  HTTP API /webhooks/oura
@@ -103,8 +118,9 @@ export class ApiStack extends Stack {
       vpc: true,
       timeout: Duration.seconds(28), // HTTP API's integration limit is 30 s
       memoryMb: 512,
-      secrets: ['db', 'nextauth', 'tokenKey', 'oura', 'strava', 'terra'],
+      secrets: ['nextauth', 'oauthState', 'tokenKey', 'oura', 'strava', 'terra'],
       tokenKms: true,
+      db: { user: 'rd_api' },
     });
 
     // Webhook Lambdas persist the event first. After an Aurora auto-pause the first insert waits for
@@ -118,15 +134,18 @@ export class ApiStack extends Stack {
       vpc: true,
       timeout: Duration.minutes(5),
       memoryMb: 512,
-      secrets: ['db', 'strava', 'tokenKey'],
+      secrets: ['strava', 'tokenKey'],
       tokenKms: true,
+      db: { user: 'rd_strava_replay' },
+      env: { STRAVA_REPLAY_MAX_ATTEMPTS: String(config.stravaReplayMaxAttempts) },
     });
     const terraHook = this.fn({
       ...webhookBase,
       id: 'webhook-terra',
       entry: lambdaEntry('webhooks'),
       description: 'Terra webhook receiver (signature-verified)',
-      secrets: ['db', 'terra', 'tokenKey'],
+      secrets: ['terra', 'tokenKey'],
+      db: { user: 'rd_hook_terra' },
       env: { WEBHOOK_PROVIDERS: 'terra' },
     });
     const stravaHook = this.fn({
@@ -134,8 +153,13 @@ export class ApiStack extends Stack {
       id: 'webhook-strava',
       entry: lambdaEntry('webhooks'),
       description: 'Strava webhook receiver (verify token + pinned subscription id)',
-      secrets: ['db', 'strava', 'tokenKey'],
-      env: { WEBHOOK_PROVIDERS: 'strava', STRAVA_REPLAY_FUNCTION: replay.functionName },
+      secrets: ['strava', 'tokenKey'],
+      db: { user: 'rd_hook_strava' },
+      env: {
+        WEBHOOK_PROVIDERS: 'strava',
+        STRAVA_REPLAY_FUNCTION: replay.functionName,
+        STRAVA_REPLAY_MAX_ATTEMPTS: String(config.stravaReplayMaxAttempts),
+      },
     });
     replay.grantInvoke(this.roleOf(stravaHook)); // kick the replay after answering; this ONE function
     const ouraHook = this.fn({
@@ -143,7 +167,8 @@ export class ApiStack extends Stack {
       id: 'webhook-oura',
       entry: lambdaEntry('webhooks'),
       description: 'Oura webhook receiver (HMAC-verified)',
-      secrets: ['db', 'oura', 'tokenKey'],
+      secrets: ['oura', 'tokenKey'],
+      db: { user: 'rd_hook_oura' },
       env: { WEBHOOK_PROVIDERS: 'oura' },
     });
     const ouraSync = this.fn({
@@ -153,8 +178,9 @@ export class ApiStack extends Stack {
       vpc: true,
       timeout: Duration.minutes(10),
       memoryMb: 512,
-      secrets: ['db', 'oura', 'tokenKey'],
+      secrets: ['oura', 'tokenKey'],
       tokenKms: true,
+      db: { user: 'rd_oura_sync' },
     });
     const ttl = this.fn({
       id: 'webhook-ttl',
@@ -163,10 +189,44 @@ export class ApiStack extends Stack {
       vpc: true,
       timeout: Duration.minutes(2),
       memoryMb: 256,
-      secrets: ['db'],
+      secrets: [],
       tokenKms: false,
+      db: { user: 'rd_webhook_ttl' },
       env: { WEBHOOK_TTL_DAYS: String(config.webhookTtlDays) },
     });
+    // Owner decision 2026-10-04 (history is kept): fills in trends/readiness for every date with data.
+    // Needs no secrets and no KMS: it only reads scalars and writes derived rows.
+    const historyRebuild = this.fn({
+      id: 'history-rebuild',
+      entry: lambdaEntry('history-rebuild'),
+      description:
+        'Rebuilds trends/readiness_scores across ALL dates with data, in bounded batches (history kept)',
+      vpc: true,
+      timeout: Duration.minutes(10),
+      memoryMb: 512,
+      secrets: [],
+      tokenKms: false,
+      db: { user: 'rd_history_rebuild' },
+      env: {
+        HISTORY_REBUILD_MAX_DATES: String(config.historyRebuild.maxDates),
+        HISTORY_REBUILD_MAX_USERS: String(config.historyRebuild.maxUsers),
+      },
+    });
+    // Stage E item: the first master account. Deployed ONLY with `-c enableFirstMaster=true`, and it
+    // refuses at runtime once any master exists (apps/api/src/lambda/first-master.ts). DEPLOY.md.
+    const firstMaster = config.enableFirstMaster
+      ? this.fn({
+          id: 'first-master',
+          entry: lambdaEntry('first-master'),
+          description: 'ONE-OFF: creates the first master account; refuses once a master exists',
+          vpc: true,
+          timeout: Duration.minutes(2),
+          memoryMb: 256,
+          secrets: [],
+          tokenKms: false,
+          db: { user: 'rd_first_master' },
+        })
+      : undefined;
     const migrate = this.fn({
       id: 'migrate',
       entry: lambdaEntry('migrate'),
@@ -175,8 +235,9 @@ export class ApiStack extends Stack {
       vpc: true,
       timeout: Duration.minutes(15),
       memoryMb: 512,
-      secrets: ['db'],
+      secrets: [],
       tokenKms: false,
+      db: 'master', // the only function that holds the master credential: it runs DDL
       env: { MIGRATIONS_DIR: '/var/task/migrations' },
       bundleMigrations: true,
     });
@@ -195,7 +256,7 @@ export class ApiStack extends Stack {
     // Throttling is ON for every route (PLAN §12 "rate-limit the public API via API Gateway").
     // Access logs are JSON, carry no query strings (Strava's verify token is a query parameter) and
     // feed the webhook-auth-failure alarm.
-    new apigwv2.HttpStage(this, 'DefaultStage', {
+    const stage = new apigwv2.HttpStage(this, 'DefaultStage', {
       httpApi: this.httpApi,
       stageName: '$default',
       autoDeploy: true,
@@ -215,6 +276,15 @@ export class ApiStack extends Stack {
         ),
       },
     });
+
+    // Per-route throttle (security review M4): Strava's POST has no signature, so it gets a much
+    // tighter limit than the stage default. The route key must match the route created below.
+    (stage.node.defaultChild as apigwv2.CfnStage).routeSettings = {
+      'POST /api/v1/webhooks/strava': {
+        ThrottlingRateLimit: config.stravaWebhookThrottle.rateLimit,
+        ThrottlingBurstLimit: config.stravaWebhookThrottle.burstLimit,
+      },
+    };
 
     const hook = (provider: string, fn: lambda.IFunction) =>
       this.httpApi.addRoutes({
@@ -254,6 +324,9 @@ export class ApiStack extends Stack {
     }
     if (schedules.stravaReplay) this.schedule('StravaReplay', replay, schedules.stravaReplay);
     if (schedules.webhookTtl) this.schedule('WebhookTtl', ttl, schedules.webhookTtl);
+    if (schedules.historyRebuild) {
+      this.schedule('HistoryRebuild', historyRebuild, schedules.historyRebuild);
+    }
 
     for (const [name, fn] of Object.entries({
       api,
@@ -264,10 +337,16 @@ export class ApiStack extends Stack {
       'oura-subscriptions': ouraSubs,
       'strava-replay': replay,
       'webhook-ttl': ttl,
+      'history-rebuild': historyRebuild,
       migrate,
+      ...(firstMaster ? { 'first-master': firstMaster } : {}),
     })) {
       this.functions[name] = fn;
     }
+    if (firstMaster) {
+      new CfnOutput(this, 'FirstMasterFunctionName', { value: firstMaster.functionName });
+    }
+    new CfnOutput(this, 'HistoryRebuildFunctionName', { value: historyRebuild.functionName });
 
     new CfnOutput(this, 'ApiUrl', { value: apiUrl });
     new CfnOutput(this, 'TerraWebhookUrl', { value: `${apiUrl}/api/v1/webhooks/terra` });
@@ -332,13 +411,39 @@ export class ApiStack extends Stack {
     const environment: Record<string, string> = {
       ...this.sharedEnv,
       ...spec.env,
-      SECRET_ARNS: secrets
-        .filter((x) => x !== this.data.secrets.db)
-        .map((x) => x.secretArn)
-        .join(','),
+      SECRET_ARNS: secrets.map((x) => x.secretArn).join(','),
     };
-    if (spec.secrets.includes('db')) environment.DB_SECRET_ARN = this.data.secrets.db.secretArn;
     if (spec.tokenKms) environment.KMS_KEY_ID = this.data.tokenKey.keyId;
+
+    // Database access. Every DB function verifies Aurora's certificate against the RDS CA bundle that
+    // is downloaded into the bundle at synth time (see `bundleHooks`).
+    if (spec.db) environment.PG_SSL_CA_FILE = RDS_CA_BUNDLE_PATH;
+    if (spec.db === 'master') {
+      // The master credential, for DDL only (migrate).
+      this.data.secrets.db.grantRead(role);
+      environment.DB_SECRET_ARN = this.data.secrets.db.secretArn;
+    } else if (spec.db) {
+      // IAM database authentication: connect as ONE named Postgres role, with a token signed by this
+      // function's own IAM role. No database password for that user exists anywhere.
+      const { cluster } = this.data;
+      environment.DB_IAM_USER = spec.db.user;
+      environment.DB_HOST = cluster.clusterEndpoint.hostname;
+      environment.DB_PORT = Token.asString(cluster.clusterEndpoint.port);
+      environment.DB_NAME = DB_NAME;
+      role.addToPolicy(
+        new iam.PolicyStatement({
+          actions: ['rds-db:connect'],
+          resources: [
+            this.formatArn({
+              service: 'rds-db',
+              resource: 'dbuser',
+              resourceName: `${cluster.clusterResourceIdentifier}/${spec.db.user}`,
+              arnFormat: ArnFormat.COLON_RESOURCE_NAME,
+            }),
+          ],
+        }),
+      );
+    }
 
     const fn = new nodejs.NodejsFunction(this, pascal(spec.id), {
       functionName: name,
@@ -366,15 +471,19 @@ export class ApiStack extends Stack {
         target: 'node22',
         sourceMap: true,
         externalModules: ['pg-native'], // optional native pg binding, never installed
-        commandHooks: spec.bundleMigrations
-          ? {
-              beforeBundling: () => [],
-              beforeInstall: () => [],
-              afterBundling: (inputDir: string, outputDir: string) => [
-                `cp -R ${inputDir}/apps/api/db/migrations ${outputDir}/migrations`,
-              ],
-            }
-          : undefined,
+        commandHooks:
+          spec.db || spec.bundleMigrations
+            ? {
+                beforeBundling: () => [],
+                beforeInstall: () => [],
+                afterBundling: (inputDir: string, outputDir: string) => [
+                  ...(spec.db ? rdsCaBundleCommands(outputDir) : []),
+                  ...(spec.bundleMigrations
+                    ? [`cp -R ${inputDir}/apps/api/db/migrations ${outputDir}/migrations`]
+                    : []),
+                ],
+              }
+            : undefined,
       },
     });
     return fn;
@@ -401,6 +510,26 @@ export class ApiStack extends Stack {
       },
     });
   }
+}
+
+/** Where the RDS CA bundle sits inside every DB function's bundle (Lambda's cwd is /var/task). */
+export const RDS_CA_BUNDLE_PATH = '/var/task/rds-global-bundle.pem';
+export const RDS_CA_BUNDLE_URL =
+  'https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem';
+const DB_NAME = 'readiness';
+
+/**
+ * Shell commands (run by esbuild bundling on the machine that runs `cdk synth` / `cdk deploy`) that put
+ * the AWS-published RDS CA bundle next to the function code, so pool.ts can verify Aurora's certificate
+ * (security review M3). Docs: https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/UsingWithRDS.SSL.html
+ * The check makes a truncated or HTML-error download fail the build instead of shipping a useless bundle.
+ */
+export function rdsCaBundleCommands(outputDir: string): string[] {
+  const file = `${outputDir}/rds-global-bundle.pem`;
+  return [
+    `curl -fsSL --retry 3 -o ${file} ${RDS_CA_BUNDLE_URL}`,
+    `test "$(grep -c 'BEGIN CERTIFICATE' ${file})" -ge 3`,
+  ];
 }
 
 const pascal = (s: string) =>

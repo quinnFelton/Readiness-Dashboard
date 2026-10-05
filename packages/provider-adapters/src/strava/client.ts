@@ -15,6 +15,7 @@ import { StravaRateLimitError, StravaRateLimiter, nextFifteenMinuteBoundary } fr
 
 export const STRAVA_AUTHORIZE_URL = 'https://www.strava.com/oauth/authorize';
 export const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
+export const STRAVA_REVOKE_URL = 'https://www.strava.com/oauth/revoke';
 export const STRAVA_API_BASE = 'https://www.strava.com/api/v3';
 export const STRAVA_SCOPE = 'activity:read_all';
 
@@ -111,6 +112,32 @@ export class StravaClient {
       refreshToken: body.refresh_token,
       expiresAt: new Date(body.expires_at * 1000),
     };
+  }
+
+  /**
+   * Ends the grant at Strava. https://developers.strava.com/docs/authentication/ (verified 2026-10-04):
+   * POST https://www.strava.com/oauth/revoke, HTTP Basic auth (client_id:client_secret), form field
+   * `token` (access or refresh token). 200 with an empty body whether or not the token was found.
+   */
+  async revoke(token: string): Promise<void> {
+    const basic = Buffer.from(`${this.cfg.clientId}:${this.cfg.clientSecret}`).toString('base64');
+    const res = await this.doFetch(STRAVA_REVOKE_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: `Basic ${basic}`,
+      },
+      body: new URLSearchParams({ token }).toString(),
+    });
+    if (!res.ok) throw new StravaHttpError(res.status);
+  }
+
+  /**
+   * GET /athlete (https://developers.strava.com/docs/reference/): cheapest authenticated call, used
+   * only to confirm that a token still works. 401 -> StravaAuthError (the grant is gone).
+   */
+  async getAthlete(accessToken: string): Promise<{ id?: number } | null> {
+    return this.get<{ id?: number }>(accessToken, '/athlete');
   }
 
   getActivity(accessToken: string, id: string | number): Promise<StravaActivitySummary | null> {

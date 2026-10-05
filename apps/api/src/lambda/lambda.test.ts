@@ -8,6 +8,8 @@ import {
   loadSecretsIntoEnv,
   resetBootstrapForTests,
 } from './bootstrap';
+import { resetPoolDefaults, sslFromEnv, toPgSsl } from '../users/pool';
+import { iamDatabaseUrl } from './db-auth';
 import { migrate } from './migrate';
 import { runReplay } from './strava-replay';
 import { DEFAULT_TTL_DAYS, deleteOldWebhookEvents, resolveDays } from './webhook-ttl';
@@ -28,8 +30,8 @@ afterEach(() => {
 });
 
 describe('bootstrap (Secrets Manager -> env)', () => {
-  it('builds DATABASE_URL from the DB secret, url-encoding the credentials', async () => {
-    const env: NodeJS.ProcessEnv = { DB_SECRET_ARN: 'db' };
+  it('builds DATABASE_URL from the DB secret, url-encoding the credentials, with NO sslmode (M3)', async () => {
+    const env: NodeJS.ProcessEnv = { DB_SECRET_ARN: 'db', PG_SSL_CA_FILE: '/var/task/rds.pem' };
     await loadSecretsIntoEnv({
       env,
       client: secretsClient({
@@ -42,9 +44,59 @@ describe('bootstrap (Secrets Manager -> env)', () => {
         },
       }),
     });
-    expect(env.DATABASE_URL).toBe(
-      'postgres://rd%20admin:p%40ss%2Fw%3Ard@h.example:5432/readiness?sslmode=no-verify',
+    // A connection-string sslmode would override the pool's verifying `ssl` option; never emit one.
+    expect(env.DATABASE_URL).toBe('postgres://rd%20admin:p%40ss%2Fw%3Ard@h.example:5432/readiness');
+    expect(env.DATABASE_URL).not.toMatch(/sslmode/);
+  });
+
+  it('fails closed without the RDS CA bundle: no unverified connection to Aurora (M3)', async () => {
+    const client = secretsClient({ db: { username: 'u', password: 'p', host: 'h' } });
+    await expect(loadSecretsIntoEnv({ env: { DB_SECRET_ARN: 'db' }, client })).rejects.toThrow(
+      /PG_SSL_CA_FILE/,
     );
+    await expect(
+      loadSecretsIntoEnv({ env: { DB_IAM_USER: 'rd_api', DB_HOST: 'h', DB_NAME: 'readiness' } }),
+    ).rejects.toThrow(/PG_SSL_CA_FILE/);
+  });
+
+  it('IAM auth: connects as the per-function db user with a signed token, reads no DB secret', async () => {
+    const env: NodeJS.ProcessEnv = {
+      DB_IAM_USER: 'rd_hook_strava',
+      DB_HOST: 'cluster.example.rds.amazonaws.com',
+      DB_NAME: 'readiness',
+      PG_SSL_CA_FILE: '/var/task/rds.pem',
+    };
+    const getAuthToken = vi.fn(async () => 'signed-iam-token');
+    const client = secretsClient({});
+    await loadSecretsIntoEnv({ env, client, iamSigner: { getAuthToken } });
+    // No password in the URL, and no Secrets Manager call at all (nothing to read).
+    expect(env.DATABASE_URL).toBe(
+      'postgres://rd_hook_strava@cluster.example.rds.amazonaws.com:5432/readiness',
+    );
+    expect(client.send).not.toHaveBeenCalled();
+    expect(() => iamDatabaseUrl({ DB_IAM_USER: 'x' })).toThrow(/DB_HOST/);
+    // The pool asks for a token per new connection.
+    const { getPool, closePool } = await import('../users/pool');
+    process.env.DATABASE_URL = env.DATABASE_URL;
+    try {
+      const pw = (getPool() as unknown as { options: { password: () => Promise<string> } }).options
+        .password;
+      expect(await pw()).toBe('signed-iam-token');
+    } finally {
+      await closePool();
+      delete process.env.DATABASE_URL;
+      resetPoolDefaults();
+    }
+  });
+
+  it('the pool verifies the server: ssl = CA + rejectUnauthorized, never relaxed (M3)', () => {
+    const ca = Buffer.from('-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n');
+    expect(toPgSsl({ ca })).toEqual({ ca, rejectUnauthorized: true, minVersion: 'TLSv1.2' });
+    expect(toPgSsl(undefined)).toBeUndefined(); // local Docker only
+    expect(sslFromEnv({}, () => ca)).toBeUndefined();
+    expect(
+      sslFromEnv({ PG_SSL_CA_FILE: '/x.pem' }, (p) => (p === '/x.pem' ? ca : Buffer.alloc(0))),
+    ).toEqual({ ca });
   });
 
   it('copies JSON secret keys to env, skipping placeholders and existing values', async () => {

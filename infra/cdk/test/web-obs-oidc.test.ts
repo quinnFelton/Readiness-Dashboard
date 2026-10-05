@@ -30,10 +30,26 @@ describe('web stack (Amplify)', () => {
     expect(spec).toContain('pnpm --filter @rd/web build');
   });
 
-  it('reads NEXTAUTH_SECRET from the SAME Secrets Manager entry the API reads', () => {
-    expect(buildSpec()).toContain(
-      'secretsmanager get-secret-value --secret-id "$NEXTAUTH_SECRET_ARN"',
-    );
+  it('no secret is in the build: .env.production gets only non-secret values (stage E item)', () => {
+    const spec = buildSpec();
+    // The build neither reads Secrets Manager nor writes a secret value anywhere.
+    expect(spec).not.toMatch(/secretsmanager|get-secret-value/);
+    expect(spec).not.toMatch(/NEXTAUTH_SECRET|AUTH_SECRET|AUTH_GOOGLE/);
+    // What it does write: API URL, stage, ARNs of the runtime secrets, public URLs.
+    const written = [...spec.matchAll(/printf "(\w+)=/g)].map((m) => m[1]).sort();
+    expect(written).toEqual([
+      'API_URL',
+      'AUTH_URL',
+      'NEXTAUTH_URL',
+      'RUNTIME_SECRET_ARNS',
+      'STAGE',
+    ]);
+    // AUTH_TRUST_HOST is not set anywhere (review L9): AUTH_URL already makes Auth.js trust the host.
+    expect(spec).not.toContain('AUTH_TRUST_HOST');
+    expect(JSON.stringify(web.toJSON())).not.toContain('AUTH_TRUST_HOST');
+  });
+
+  it('the app reads the SAME nextauth secret the API reads, at runtime through the SSR compute role', () => {
     const { api, data } = synth();
     const nextauth = Object.entries(data.findResources('AWS::SecretsManager::Secret')).find(
       ([, s]) => s.Properties.Name === 'rd/dev/nextauth',
@@ -44,7 +60,17 @@ describe('web stack (Amplify)', () => {
       (f) => f.Properties.FunctionName === 'rd-dev-api',
     )!.Properties.Environment.Variables.SECRET_ARNS;
     expect(JSON.stringify(env)).toContain('NextAuthSecret');
-    expect(JSON.stringify(web.findResources('AWS::Amplify::App'))).toContain('NextAuthSecret');
+    const app = Object.values(web.findResources('AWS::Amplify::App'))[0]!;
+    const runtimeArns = app.Properties.EnvironmentVariables.find(
+      (v: { Name: string }) => v.Name === 'RUNTIME_SECRET_ARNS',
+    );
+    expect(JSON.stringify(runtimeArns)).toContain('NextAuthSecret');
+    expect(JSON.stringify(runtimeArns)).toContain('GoogleOAuthSecret');
+    expect(app.Properties.ComputeRoleArn).toBeDefined();
+    // No env var carries a secret value, only ARNs.
+    expect(JSON.stringify(app.Properties.EnvironmentVariables)).not.toMatch(
+      /REPLACE_ME|SecretString/,
+    );
   });
 
   it('keeps secret values out of Amplify config; only ARNs/names and the GitHub token reference', () => {
@@ -55,19 +81,42 @@ describe('web stack (Amplify)', () => {
     expect(json).toContain(':SecretString:token::}}');
   });
 
-  it('build role may read only the auth secret and the api-url parameter', () => {
+  it('build role may read only the api-url parameter; the compute role only the two web secrets', () => {
     const policies = Object.values(web.findResources('AWS::IAM::Policy'));
-    const actions = policies.flatMap((p) =>
-      p.Properties.PolicyDocument.Statement.flatMap((s: { Action: string | string[] }) =>
-        asArray(s.Action),
-      ),
-    );
-    expect(actions.sort()).toEqual([
+    const byRole = (needle: string) =>
+      policies.filter((p) => JSON.stringify(p.Properties.Roles).includes(needle));
+    const actionsOf = (ps: typeof policies) =>
+      ps
+        .flatMap((p) =>
+          p.Properties.PolicyDocument.Statement.flatMap((s: { Action: string | string[] }) =>
+            asArray(s.Action),
+          ),
+        )
+        .sort();
+    // BUILD: no Secrets Manager at all.
+    expect(actionsOf(byRole('BuildRole'))).toEqual(['ssm:GetParameter']);
+    expect(JSON.stringify(byRole('BuildRole'))).toContain('parameter/rd/dev/api-url');
+    // COMPUTE: read-only on exactly nextauth + google-oauth.
+    const compute = byRole('ComputeRole');
+    expect([...new Set(actionsOf(compute))]).toEqual([
       'secretsmanager:DescribeSecret',
       'secretsmanager:GetSecretValue',
-      'ssm:GetParameter',
     ]);
-    expect(JSON.stringify(policies)).toContain('parameter/rd/dev/api-url');
+    const resources = compute.flatMap((p) =>
+      p.Properties.PolicyDocument.Statement.flatMap((s: { Resource: unknown }) =>
+        asArray(s.Resource),
+      ),
+    );
+    expect(resources).toHaveLength(2);
+    expect(JSON.stringify(resources)).toContain('NextAuthSecret');
+    expect(JSON.stringify(resources)).toContain('GoogleOAuthSecret');
+    // The compute role is assumable only by Amplify.
+    const roles = Object.values(web.findResources('AWS::IAM::Role'));
+    for (const r of roles) {
+      expect(JSON.stringify(r.Properties.AssumeRolePolicyDocument)).toContain(
+        'amplify.amazonaws.com',
+      );
+    }
   });
 
   it('computes NEXTAUTH_URL from the Amplify default domain unless a custom domain is configured', () => {

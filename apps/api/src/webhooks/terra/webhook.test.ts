@@ -385,6 +385,7 @@ describe('runTerraBackfillOnce', () => {
       {
         generateWidgetSession: async () => ({ url: '' }),
         requestSleepBackfill: async (r) => (calls.push(r), {}),
+        deauthenticateUser: async () => undefined,
       },
       randomUUID(),
       'tu',

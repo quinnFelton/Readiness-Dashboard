@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { runner } from 'node-pg-migrate';
+import { sslFromEnv, toPgSsl } from '../users/pool';
 import { ensureBootstrapped } from './bootstrap';
 
 // Applies apps/api/db/migrations from inside the VPC (the DB is unreachable from GitHub runners). The
@@ -29,7 +30,12 @@ export async function migrate(
   for (let i = 1; ; i++) {
     try {
       const done = await runner({
-        databaseUrl: { connectionString, connectionTimeoutMillis: 45_000 },
+        // TLS verified against the RDS CA bundle when PG_SSL_CA_FILE is set (always, in AWS).
+        databaseUrl: {
+          connectionString,
+          connectionTimeoutMillis: 45_000,
+          ssl: toPgSsl(sslFromEnv(env)),
+        },
         dir,
         direction: 'up',
         migrationsTable: 'pgmigrations',

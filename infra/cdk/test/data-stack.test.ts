@@ -80,6 +80,18 @@ describe('data stack', () => {
       expect(body).toBeTruthy();
       expect(body).not.toMatch(/AKIA|-----BEGIN|sk_live/);
     }
+    // H1: the OAuth state HMAC key is its own generated secret, >= 32 chars.
+    data.hasResourceProperties('AWS::SecretsManager::Secret', {
+      Name: 'rd/dev/oauth-state',
+      GenerateSecretString: Match.objectLike({
+        GenerateStringKey: 'OAUTH_STATE_SECRET',
+        PasswordLength: Match.anyValue(),
+      }),
+    });
+    const oauthState = Object.values(secrets).find(
+      (s) => s.Properties.Name === 'rd/dev/oauth-state',
+    );
+    expect(oauthState!.Properties.GenerateSecretString.PasswordLength).toBeGreaterThanOrEqual(32);
     // NEXTAUTH_SECRET is generated here so web and API read the very same value.
     data.hasResourceProperties('AWS::SecretsManager::Secret', {
       Name: 'rd/dev/nextauth',

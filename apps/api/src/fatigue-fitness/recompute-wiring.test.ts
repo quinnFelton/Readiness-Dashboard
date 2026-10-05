@@ -216,6 +216,9 @@ describe('strava ingest → trends', () => {
     const app = appFor(ingestWith());
     await request(app).post('/w').send(event('create')).expect(200);
     await pool.query(`DELETE FROM trends WHERE user_id = $1`, [a]); // observe the delete's pass
+    // A delete event is only a hint (security review H2): the ride must really be gone on Strava.
+    activities.delete(String(activityId));
+    streams.delete(String(activityId));
     await request(app).post('/w').send(event('delete')).expect(200);
     expect(await eventStatuses(a, 'strava')).toEqual(['processed', 'processed']);
     expect(

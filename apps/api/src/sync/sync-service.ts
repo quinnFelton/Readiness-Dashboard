@@ -3,6 +3,7 @@ import type { NormalizedActivityEffort, NormalizedDailyMetric } from '@rd/shared
 import { DEFAULT_DERIVER_ID } from '@rd/scoring-engine';
 import type pg from 'pg';
 import type { TokenCipher } from '../crypto/token-cipher';
+import { type Recompute, sharedRecompute } from '../fatigue-fitness/recompute';
 
 // PLAN §6: orchestrates whichever adapters connection_configs says are active. Contains NO
 // provider-specific code — everything provider-shaped lives behind ProviderAdapter.
@@ -35,6 +36,8 @@ export class SyncService {
     private readonly registry: AdapterRegistry,
     private readonly cipher: TokenCipher,
     private readonly now: () => Date = () => new Date(),
+    /** Trend/readiness hook (PLAN §8.4). Default: the process-wide one. */
+    private readonly recompute?: Recompute,
   ) {}
 
   /** Syncs every configured + connected + active provider for one user. Failures are isolated per provider. */
@@ -107,10 +110,19 @@ export class SyncService {
       });
       if (result.refreshedGrant)
         await this.storeRefreshedTokens(userId, adapter.key, result.refreshedGrant);
-      const counts = await this.normalizeAndUpsert(userId, adapter, result.raw);
+      const dates: string[] = [];
+      const counts = await this.normalizeAndUpsert(userId, adapter, result.raw, dates);
       await this.pool.query(
         `UPDATE provider_connections SET last_synced_at = $3 WHERE user_id = $1 AND provider = $2`,
         [userId, adapter.key, this.now()],
+      );
+      // PLAN §8.4: compute on sync. Every other ingest path calls this hook (integration stage E);
+      // this orchestrator used to skip it. The hook never throws, so it cannot turn a successful
+      // sync into a failed one.
+      await (this.recompute ?? sharedRecompute())(
+        userId,
+        adapter.role === 'activity_source' ? 'activity' : 'daily_metrics',
+        dates,
       );
       return { ...base, ...counts, ok: true };
     } catch (err) {

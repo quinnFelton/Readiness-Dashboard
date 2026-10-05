@@ -79,6 +79,28 @@ describe('fetchRoster', () => {
     expect(rows[0]!.latestState).toBe('ambiguous');
   });
 
+  it('GET /users now carries the state: an explicit null means "none yet", not "ask /trends/:id" (phase 9)', async () => {
+    const { fetchRoster } = await import('./_lib/api');
+    apiFetch.mockClear();
+    apiFetch.mockResolvedValueOnce(
+      json({
+        users: [
+          { id: 'a', email: 'a@x', name: null, latestState: null, latestStateAsOf: null },
+          {
+            id: 'b',
+            email: 'b@x',
+            name: null,
+            latestState: 'fitness_gain',
+            latestStateAsOf: '2026-10-03',
+          },
+        ],
+      }),
+    );
+    const rows = await fetchRoster();
+    expect(apiFetch).toHaveBeenCalledTimes(1); // one request for the whole roster, however many athletes
+    expect(rows.map((r) => r.latestState)).toEqual([null, 'fitness_gain']);
+  });
+
   it('throws ApiError with status on 403 (non-master reaches API)', async () => {
     const { fetchRoster, ApiError } = await import('./_lib/api');
     apiFetch.mockResolvedValueOnce(json({}, 403));

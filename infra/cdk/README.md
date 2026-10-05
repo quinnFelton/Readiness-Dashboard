@@ -13,13 +13,13 @@ cd infra/cdk && npx cdk synth -c stage=dev      # real esbuild bundling of every
 
 Deploy order is `data → web → api → observability` (real references; no cycles).
 
-| Stack (`rd-<stage>-…`) | Contents                                                                                                                                                                                                                         |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`                 | VPC (public / app-private / isolated-DB subnets, **NAT instance** by default), Aurora Serverless v2 Postgres 16 (min 0 ACU, auto-pause), KMS key for the token data key, every Secrets Manager entry (placeholders or generated) |
-| `web`                  | Amplify Hosting app + branch for `apps/web` (Next.js SSR, pnpm monorepo build spec), build role                                                                                                                                  |
-| `api`                  | HTTP API (throttled, JSON access logs), 9 Lambdas each with its own role + log group, EventBridge Scheduler schedules, `/rd/<stage>/api-url` SSM parameter                                                                       |
-| `observability`        | SNS topic → email (`alarmEmail` context), 6 CloudWatch alarms (inside the 10 free alarms)                                                                                                                                        |
-| `rd-github-oidc`       | Optional, account-level, deployed once by hand: GitHub OIDC provider + one deploy role per GitHub environment. Exists only with `-c githubRepo=owner/repo`                                                                       |
+| Stack (`rd-<stage>-…`) | Contents                                                                                                                                                                                                                                                        |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`                 | VPC (public / app-private / isolated-DB subnets, **NAT instance** by default), Aurora Serverless v2 Postgres 16 (min 0 ACU, auto-pause), KMS key for the token data key, every Secrets Manager entry (placeholders or generated)                                |
+| `web`                  | Amplify Hosting app + branch for `apps/web` (Next.js SSR, pnpm monorepo build spec), a build role (API-URL parameter only) and an SSR **compute role** (reads `nextauth` + `google-oauth` at runtime)                                                           |
+| `api`                  | HTTP API (throttled, per-route throttle on the Strava POST, JSON access logs), 10 Lambdas (+ the optional one-off `first-master`) each with its own role, log group and **Postgres role**, EventBridge Scheduler schedules, `/rd/<stage>/api-url` SSM parameter |
+| `observability`        | SNS topic → email (`alarmEmail` context), 6 CloudWatch alarms (inside the 10 free alarms)                                                                                                                                                                       |
+| `rd-github-oidc`       | Optional, account-level, deployed once by hand: GitHub OIDC provider + one deploy role per GitHub environment. Exists only with `-c githubRepo=owner/repo`                                                                                                      |
 
 Nothing account-specific lives in code: account/region come from the CLI credentials
 (`CDK_DEFAULT_*`), everything else from context.
@@ -28,11 +28,18 @@ Nothing account-specific lives in code: account/region come from the CLI credent
 
 The API needs the web URL (OAuth redirect URIs); the web app needs the API URL. A CloudFormation
 reference both ways would be a cycle, so the `api` stack consumes the `web` stack, and the Amplify
-**build** reads the API URL from SSM (`/rd/<stage>/api-url`) and `NEXTAUTH_SECRET` from Secrets Manager,
-writing them to `apps/web/.env.production` (AWS's documented way to give Next.js SSR env vars). Trigger
-the first Amplify build only after the api stack exists (DEPLOY.md). Caveat from AWS's docs: anything
-in that file is readable by anyone with access to the deployment artifacts — see "Needs" in the phase
-report (the web app should read the secret at runtime through an Amplify compute role).
+**build** reads the API URL from SSM (`/rd/<stage>/api-url`) and writes it, with the stage and the _ARNs_
+of the runtime secrets, to `apps/web/.env.production` (AWS's documented way to give Next.js SSR env vars).
+Trigger the first Amplify build only after the api stack exists (DEPLOY.md).
+
+**No secret is in the build.** Anything in `.env.production` is readable by whoever can read the
+deployment artifacts (AWS's own docs say so), so since phase 9 `NEXTAUTH_SECRET` and the Google OAuth client are
+**not** written there and the build role cannot read Secrets Manager at all. The running Next.js server reads
+them itself at start-up (`apps/web/src/instrumentation.ts` → `lib/auth/runtime-secrets.ts`) using the Amplify
+SSR **compute role** (`web-stack.ts`), which can read exactly `nextauth` and `google-oauth`:
+<https://docs.aws.amazon.com/amplify/latest/userguide/amplify-SSR-compute-role.html>. Not verifiable without a
+deploy: that `register()` runs in Amplify's compute and that its credentials are visible to the AWS SDK
+there (the docs say they are "immediately available in the runtime of your SSR function").
 
 ## Context (all optional)
 
@@ -46,7 +53,13 @@ report (the web app should read the secret at runtime through an Amplify compute
 | `dbMinAcu` / `dbMaxAcu`                                      | `0` / `2`                            | `0` enables auto-pause                                                                  |
 | `dbAutoPauseMinutes`                                         | `5`                                  | idle time before pausing (5–1440)                                                       |
 | `dbBackupDays`                                               | `1` dev / `7` prod                   |                                                                                         |
+| `dbRotationDays`                                             | `30`                                 | master DB password rotation interval; `0` = off (only `migrate` uses the master)        |
 | `throttleRate` / `throttleBurst`                             | `20` / `40`                          | API Gateway stage throttling (req/s)                                                    |
+| `throttleStravaRate` / `throttleStravaBurst`                 | `5` / `10`                           | tighter per-route limit on the unauthenticated `POST /webhooks/strava`                  |
+| `historyRebuildSchedule`                                     | `cron(20 10 * * ? *)`                | works through queued history-rebuild requests (daily, right after the other daily jobs) |
+| `historyRebuildMaxDates` / `historyRebuildMaxUsers`          | `120` / `10`                         | per-invocation bounds of the history rebuild                                            |
+| `stravaReplayMaxAttempts`                                    | `5`                                  | a failing Strava webhook event is retried this often, then `abandoned`                  |
+| `enableFirstMaster`                                          | `false`                              | deploys the one-off `first-master` function (DEPLOY.md); remove it after use            |
 | `ouraSyncSchedule`                                           | `cron(0 10 * * ? *)`                 | daily safety net behind Oura webhooks                                                   |
 | `ouraSubscriptionsSchedule`                                  | `cron(30 9 * * ? *)`                 | renews Oura webhook subscriptions (no DB)                                               |
 | `stravaReplaySchedule`                                       | `rate(6 hours)`                      | fallback only, see below                                                                |
@@ -60,31 +73,50 @@ report (the web app should read the secret at runtime through an Amplify compute
 
 Entrypoints are `apps/api/src/lambda/*.ts`, bundled by `NodejsFunction` (esbuild; the `@rd/*` workspace
 packages ship TS source and are compiled into the bundle). Secrets are **never** in Lambda env: the
-functions get only secret ARNs, and `lambda/bootstrap.ts` loads them at cold start (the DB secret becomes
-`DATABASE_URL` before the first `getPool()`, so `users/pool.ts` needs no change). `PG_POOL_MAX=1`.
+functions get only secret ARNs, and `lambda/bootstrap.ts` loads them at cold start. `PG_POOL_MAX=1`.
 
-| Function             | Secrets read                                     | `kms:Decrypt` | VPC    | Triggered by                          |
-| -------------------- | ------------------------------------------------ | ------------- | ------ | ------------------------------------- |
-| `api`                | db, nextauth, token-key, oura, strava, terra     | yes           | yes    | HTTP API catch-all                    |
-| `webhook-terra`      | db, terra, token-key                             | yes           | yes    | `GET/POST /api/v1/webhooks/terra`     |
-| `webhook-strava`     | db, strava, token-key (+ invoke `strava-replay`) | yes           | yes    | `GET/POST /api/v1/webhooks/strava`    |
-| `webhook-oura`       | db, oura, token-key                              | yes           | yes    | `GET/POST /api/v1/webhooks/oura`      |
-| `oura-sync`          | db, oura, token-key                              | yes           | yes    | Scheduler, daily                      |
-| `oura-subscriptions` | oura                                             | no            | **no** | Scheduler, daily (+ deploy workflow)  |
-| `strava-replay`      | db, strava, token-key                            | yes           | yes    | webhook kick + Scheduler fallback     |
-| `webhook-ttl`        | db                                               | no            | yes    | Scheduler, daily                      |
-| `migrate`            | db                                               | no            | yes    | deploy workflow (`aws lambda invoke`) |
+| Function             | Secrets read                                          | `kms:Decrypt` | VPC    | Database login             | Triggered by                          |
+| -------------------- | ----------------------------------------------------- | ------------- | ------ | -------------------------- | ------------------------------------- |
+| `api`                | nextauth, oauth-state, token-key, oura, strava, terra | yes           | yes    | `rd_api` (IAM)             | HTTP API catch-all                    |
+| `webhook-terra`      | terra, token-key                                      | yes           | yes    | `rd_hook_terra` (IAM)      | `GET/POST /api/v1/webhooks/terra`     |
+| `webhook-strava`     | strava, token-key (+ invoke `strava-replay`)          | yes           | yes    | `rd_hook_strava` (IAM)     | `GET/POST /api/v1/webhooks/strava`    |
+| `webhook-oura`       | oura, token-key                                       | yes           | yes    | `rd_hook_oura` (IAM)       | `GET/POST /api/v1/webhooks/oura`      |
+| `oura-sync`          | oura, token-key                                       | yes           | yes    | `rd_oura_sync` (IAM)       | Scheduler, daily                      |
+| `oura-subscriptions` | oura                                                  | no            | **no** | none                       | Scheduler, daily (+ deploy workflow)  |
+| `strava-replay`      | strava, token-key                                     | yes           | yes    | `rd_strava_replay` (IAM)   | webhook kick + Scheduler fallback     |
+| `webhook-ttl`        | none                                                  | no            | yes    | `rd_webhook_ttl` (IAM)     | Scheduler, daily                      |
+| `history-rebuild`    | none                                                  | no            | yes    | `rd_history_rebuild` (IAM) | Scheduler, daily (+ manual invoke)    |
+| `first-master`       | none                                                  | no            | yes    | `rd_first_master` (IAM)    | manual, only with `enableFirstMaster` |
+| `migrate`            | db (**the master credential**)                        | no            | yes    | master (Secrets Manager)   | deploy workflow (`aws lambda invoke`) |
 
 Each role also has: log writes scoped to its own log group, and (VPC functions) the three ENI actions Lambda
-requires (the only `Resource: "*"`). No wildcard actions; no RDS/IAM/S3/SQS grants. Tests assert all of this
-(`test/api-stack.test.ts`).
+requires (the only `Resource: "*"`). No wildcard actions; no RDS control-plane/IAM/S3/SQS grants. Tests assert
+all of this (`test/api-stack.test.ts`).
+
+### Per-function database access (stage E item)
+
+The Lambdas used to share the Aurora **master** credential. Now only `migrate` (it runs DDL) holds it. Every
+other function connects as **its own Postgres role** (created by the phase 9 migration, `*_phase-9_hardening.sql`)
+using **IAM database authentication**: the function's IAM role may `rds-db:connect` for exactly that one db
+user (`rds-db:connect` on `dbuser:<cluster-resource-id>/<role>`), the "password" is a 15-minute signed token
+(`lambda/db-auth.ts`), and the roles have no password at all. Each role has only the table privileges its
+handler's SQL needs, pinned exactly by `apps/api/src/lambda/db-roles.test.ts`, which also runs the real
+Strava/Terra/Oura/TTL/recompute handler code under each role. Documented limits: the privileges were derived by
+reading the handlers (the test fails if a handler needs more); a new table or a new SQL statement in a handler
+needs a grant added in a migration.
+
+Every DB function verifies the server's certificate against the **RDS CA bundle** (`PG_SSL_CA_FILE`,
+`users/pool.ts`; fails closed without it). The bundle is downloaded from AWS's truststore into each bundle at
+`cdk synth/deploy` time (`rdsCaBundleCommands`), so the machine that synthesises needs `curl` and network
+access, and a truncated download fails the build. The master password rotates every `dbRotationDays` (30) with
+a hosted rotation Lambda; that is safe because only `migrate` reads it, on every run.
 
 **Deviation from PLAN §11 ("webhook Lambdas: RDS write only"):** Strava/Oura/Terra ingest decrypts the
 user's stored tokens (Strava refresh, Terra backfill) and the provider's client secret is needed to refresh
-or verify, so each webhook role additionally has _its own provider's_ secret + token-key + `kms:Decrypt`.
-There is no IAM-level "RDS write only": database access is network (security group) plus the DB secret, and
-all functions use the one Aurora master credential. Per-function Postgres roles would be a follow-up
-(needs migrations + one secret per role).
+or verify, so each webhook role additionally has _its own provider's_ secret + token-key + `kms:Decrypt`. The
+database side is now close to "only what it needs" (a webhook role cannot read another user's athlete events,
+feedback, or any other function's tables), but it is not literally write-only: the webhook handlers also run the
+trend recompute, so they read the metrics tables and write `trends` / `readiness_scores`.
 
 ### Token encryption (envelope)
 
@@ -101,8 +133,10 @@ the response, so slow ingests stay `pending`. `strava-replay` completes them (`r
 `lazyStravaIngest()`). A fixed tick every few minutes would keep Aurora from ever pausing, so instead
 **`webhook-strava` async-invokes `strava-replay` right after a successful POST** (the DB is already awake)
 with `pendingAfterSec: 0`; a slow `rate(6 hours)` schedule catches rate-limited (`failed`) rows. To trade cost
-for latency: `-c stravaReplaySchedule='rate(5 minutes)'`. Known gap: `replayStravaEvents` has no retry cap,
-so a permanently failing event is retried on every run until the 30-day TTL removes it.
+for latency: `-c stravaReplaySchedule='rate(5 minutes)'`. A failing event is retried up to
+`stravaReplayMaxAttempts` (default 5) times and then becomes `abandoned` (terminal; the 30-day TTL removes it);
+a revoked grant is abandoned at once. The webhook only kicks the replay when an event is still pending after
+its response budget, so forged or duplicate POSTs do not each start a Lambda.
 
 ### Aurora auto-pause
 

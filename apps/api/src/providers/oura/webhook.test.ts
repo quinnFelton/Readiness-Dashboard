@@ -333,7 +333,8 @@ describe('oura webhook router', () => {
       dataStatus = 500;
       const res = await post(appWith(), event());
       expect(res.status).toBe(500);
-      expect(JSON.stringify(res.body)).toBe('{"error":"OuraHttpError"}');
+      // Generic body (security review L2): the class name is in the receipt, not the response.
+      expect(JSON.stringify(res.body)).toBe('{"error":"processing failed"}');
       const rs = await receipts();
       expect(rs[0].status).toBe('failed');
       expect(rs[0].payload_jsonb.outcome).toBe('OuraHttpError');

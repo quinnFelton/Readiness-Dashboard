@@ -71,6 +71,8 @@ export interface BackfillRequest {
 export interface TerraClient {
   generateWidgetSession(req: WidgetSessionRequest): Promise<{ url: string; sessionId?: string }>;
   requestSleepBackfill(req: BackfillRequest): Promise<RateLimitInfo>;
+  /** Disconnects a Terra user (stops all pushes). See the UNVERIFIED note on the implementation. */
+  deauthenticateUser(terraUserId: string): Promise<void>;
 }
 
 const dayCount = (a: string, b: string) =>
@@ -121,6 +123,22 @@ export function createTerraClient(cfg: TerraClientConfig): TerraClient {
         url: json.url,
         sessionId: typeof json.session_id === 'string' ? json.session_id : undefined,
       };
+    },
+
+    async deauthenticateUser(terraUserId) {
+      // Doc (verified 2026-10-04): "call /auth/deauthenticateUser with the user's user_id"; API-only,
+      // not in the dashboard. https://docs.tryterra.co/help-center/help-topics/data-api-sdk/authentication-users-and-connection-state/deauthenticate-users.md
+      // UNVERIFIED: the fetched pages never state the HTTP method or whether user_id is a query
+      // parameter; DELETE + query is an assumption. Callers treat a failure as "not revoked" and
+      // say so; confirm against the API reference before relying on it (docs/reports/9-hardening.md).
+      const res = await f(
+        `${apiBase}/auth/deauthenticateUser?${new URLSearchParams({ user_id: terraUserId })}`,
+        {
+          method: 'DELETE',
+          headers,
+        },
+      );
+      check(res);
     },
 
     async requestSleepBackfill({ terraUserId, startDate, endDate }) {
