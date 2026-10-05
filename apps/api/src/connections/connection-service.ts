@@ -113,22 +113,36 @@ export class ConnectionService {
   }
 
   /**
-   * PLAN §12 (per-user delete from day one): removes the stored tokens AND everything derived from
-   * this provider for this user, in one transaction. Matches on the `source` column, which
-   * SyncService forces to the adapter key on every row it writes.
+   * Removes the stored tokens and the source selection for this provider, in one transaction.
+   *
+   * By default the user's history stays (PLAN §10 flow 8): the scalars already derived from this
+   * provider, and the trends / readiness built on them, are kept so that switching devices does not
+   * reset the long-term picture. Kept rows from a source that is no longer configured rank after
+   * the configured ones (`pickBySource`), so a new device takes over wherever it has data.
+   *
+   * `deleteData: true` is the explicit erase (PLAN §12): it also deletes everything derived from
+   * this provider for this user, matching on the `source` column, which SyncService forces to the
+   * adapter key on every row it writes.
    */
-  async disconnect(userId: string, provider: string): Promise<void> {
+  async disconnect(
+    userId: string,
+    provider: string,
+    opts: { deleteData?: boolean } = {},
+  ): Promise<void> {
+    const deleteData = opts.deleteData === true;
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query(`DELETE FROM daily_metrics WHERE user_id = $1 AND source = $2`, [
-        userId,
-        provider,
-      ]);
-      await client.query(`DELETE FROM activity_efforts WHERE user_id = $1 AND source = $2`, [
-        userId,
-        provider,
-      ]);
+      if (deleteData) {
+        await client.query(`DELETE FROM daily_metrics WHERE user_id = $1 AND source = $2`, [
+          userId,
+          provider,
+        ]);
+        await client.query(`DELETE FROM activity_efforts WHERE user_id = $1 AND source = $2`, [
+          userId,
+          provider,
+        ]);
+      }
       await client.query(`DELETE FROM connection_configs WHERE user_id = $1 AND provider = $2`, [
         userId,
         provider,
@@ -137,10 +151,12 @@ export class ConnectionService {
         userId,
         provider,
       ]);
-      // Derived scores/states were built (in part) from the rows just deleted; drop them so the
-      // dashboard cannot show numbers from data the user asked us to erase (PLAN §12).
-      await client.query(`DELETE FROM trends WHERE user_id = $1`, [userId]);
-      await client.query(`DELETE FROM readiness_scores WHERE user_id = $1`, [userId]);
+      if (deleteData) {
+        // Derived scores/states were built (in part) from the rows just deleted; drop them so the
+        // dashboard cannot show numbers from data the user asked us to erase (PLAN §12).
+        await client.query(`DELETE FROM trends WHERE user_id = $1`, [userId]);
+        await client.query(`DELETE FROM readiness_scores WHERE user_id = $1`, [userId]);
+      }
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -148,7 +164,8 @@ export class ConnectionService {
     } finally {
       client.release();
     }
-    // Rebuild the dashboard window from whatever remains (e.g. another source), PLAN §10 flow 8.
+    // Rebuild the dashboard window: from whatever remains after an erase, or with the changed
+    // source precedence when the history was kept (PLAN §8.4).
     // Best effort: the disconnect already succeeded, and the hook never throws (it logs the error
     // name only; messages may quote health data).
     await (this.recompute ?? sharedRecompute())(

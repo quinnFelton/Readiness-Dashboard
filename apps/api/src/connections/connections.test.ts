@@ -244,7 +244,62 @@ describe('connection framework', () => {
   });
 
   describe('disconnect', () => {
-    it("deletes tokens, config and ONLY that provider's derived rows, only for that user", async () => {
+    it('keeps the history by default: only tokens and config go, only for that user', async () => {
+      for (const u of [a, b]) {
+        await conns.saveGrant(u, 'oura', 'daily_metrics_source', { accessToken: 't' });
+        await pool().query(
+          `INSERT INTO daily_metrics(user_id,date,source,metric_type,value)
+           VALUES ($1,'2026-03-01','oura','hrv',60)`,
+          [u],
+        );
+      }
+      await conns.saveGrant(a, 'strava', 'activity_source', { accessToken: 't' });
+      await pool().query(
+        `INSERT INTO activity_efforts(user_id,external_activity_id,source,date,duration_sec,avg_hr)
+         VALUES ($1,'e1','strava','2026-03-01',3600,140)`,
+        [a],
+      );
+      await pool().query(
+        `INSERT INTO readiness_scores (user_id, date, score, components_jsonb)
+         VALUES ($1, '2026-03-01', 70, '{}')`,
+        [a],
+      );
+
+      await conns.disconnect(a, 'oura');
+      await conns.disconnect(a, 'strava');
+      await conns.disconnect(a, 'strava'); // idempotent
+      expect(await count('provider_connections', a)).toBe(0);
+      expect(await count('connection_configs', a)).toBe(0);
+      expect(await count('daily_metrics', a, `AND source='oura'`)).toBe(1);
+      expect(await count('activity_efforts', a)).toBe(1);
+      // 2026-03-01 is outside the recompute window, so the old score must survive untouched.
+      expect(await count('readiness_scores', a, `AND date='2026-03-01'`)).toBe(1);
+      expect(await count('provider_connections', b, `AND provider='oura'`)).toBe(1);
+      // The kept rows still resolve for the dates they cover.
+      const resolved = await configs.getResolvedDailyMetrics(a, '2026-03-01', '2026-03-01');
+      expect(resolved).toMatchObject([{ source: 'oura', metricType: 'hrv', value: 60 }]);
+    });
+
+    it('DELETE /:provider keeps the history unless deleteData=true', async () => {
+      await conns.saveGrant(a, 'oura', 'daily_metrics_source', { accessToken: 't' });
+      await pool().query(
+        `INSERT INTO daily_metrics(user_id,date,source,metric_type,value)
+         VALUES ($1,'2026-03-01','oura','hrv',60)`,
+        [a],
+      );
+      await request(app)
+        .delete('/connections/oura?deleteData=1')
+        .set('Authorization', bearer(a))
+        .expect(204);
+      expect(await count('daily_metrics', a)).toBe(1);
+      await request(app)
+        .delete('/connections/oura?deleteData=true')
+        .set('Authorization', bearer(a))
+        .expect(204);
+      expect(await count('daily_metrics', a)).toBe(0);
+    });
+
+    it("deleteData: deletes tokens, config and ONLY that provider's derived rows, only for that user", async () => {
       for (const u of [a, b]) {
         await conns.saveGrant(u, 'oura', 'daily_metrics_source', { accessToken: 't' });
         await conns.saveGrant(u, 'terra', 'daily_metrics_source', { accessToken: 't' });
@@ -261,7 +316,7 @@ describe('connection framework', () => {
         [a],
       );
 
-      await conns.disconnect(a, 'oura');
+      await conns.disconnect(a, 'oura', { deleteData: true });
       expect(await count('provider_connections', a, `AND provider='oura'`)).toBe(0);
       expect(await count('connection_configs', a, `AND provider='oura'`)).toBe(0);
       expect(await count('daily_metrics', a, `AND source='oura'`)).toBe(0);
@@ -269,9 +324,9 @@ describe('connection framework', () => {
       expect(await count('provider_connections', b, `AND provider='oura'`)).toBe(1);
       expect(await count('daily_metrics', b, `AND source='oura'`)).toBe(1);
 
-      await conns.disconnect(a, 'strava');
+      await conns.disconnect(a, 'strava', { deleteData: true });
       expect(await count('activity_efforts', a)).toBe(0);
-      await conns.disconnect(a, 'strava'); // idempotent
+      await conns.disconnect(a, 'strava', { deleteData: true }); // idempotent
     });
   });
 
@@ -426,13 +481,16 @@ describe('connection framework', () => {
       expect(get.body.config).toEqual(put.body.config);
     });
 
-    it('DELETE removes the connection and derived rows via the route', async () => {
+    it('DELETE with deleteData=true removes the connection and derived rows via the route', async () => {
       await conns.saveGrant(a, 'oura', 'daily_metrics_source', { accessToken: 't' });
       await pool().query(
         `INSERT INTO daily_metrics(user_id,date,source,metric_type,value) VALUES ($1,'2026-03-01','oura','hrv',60)`,
         [a],
       );
-      await request(app).delete('/connections/oura').set('Authorization', bearer(a)).expect(204);
+      await request(app)
+        .delete('/connections/oura?deleteData=true')
+        .set('Authorization', bearer(a))
+        .expect(204);
       expect(await count('provider_connections', a)).toBe(0);
       expect(await count('daily_metrics', a)).toBe(0);
     });

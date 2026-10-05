@@ -23,8 +23,8 @@ export function ConnectionsPanel({ overview }: { overview: ConnectionsOverview }
     window.location.assign(r.data.redirectUrl); // OAuth redirect or Terra widget URL
     return null;
   };
-  const disconnect = (key: string) => async () => {
-    const r = await disconnectProvider(key);
+  const disconnect = (key: string) => async (deleteData: boolean) => {
+    const r = await disconnectProvider(key, deleteData);
     if (!r.ok) return r.error;
     router.refresh();
     return null;

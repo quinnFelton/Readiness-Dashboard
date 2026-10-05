@@ -132,3 +132,9 @@ Phase 7 observations (not failing tests):
 Process:
 
 15. `origin/chore/stage-e-briefs` (stage E briefs) is not on `main`. Merge it so `pipeline/phases/7.md` and `8.md` match the updated `OWNERSHIP.md`.
+
+## Owner follow-ups (2026-10-04)
+
+- **Disconnect keeps history by default (owner decision; PLAN §10 flow 8, §12 and the §6 route table updated).** `DELETE /connections/:provider` now removes only the tokens and the source selection. The provider's `daily_metrics` / `activity_efforts` and the user's `trends` / `readiness_scores` stay, so switching devices does not reset the long-term picture. Kept rows from a source that is no longer configured rank after configured sources (`pickBySource`). The previous behaviour is the explicit erase: `?deleteData=true`, offered as an unticked "Also delete the data already synced" box in the disconnect dialog. This resolves the disconnect half of unresolved item 1; the erase path still rebuilds only the last 28 days, and backfills older than 28 days still get no trend rows (phase 9 brief).
+- **Phase 8 tester's file rescued:** `infra/cdk/test/deploy-workflow.test.ts` was left untracked in the phase 8 worktree and is now committed. The phase 8 test report itself was never written.
+- **Checks:** typecheck and lint clean; `pnpm test` 88 files, 769 tests; `pnpm test:e2e` 43/43 (flow 8 now covers both the keep and the erase path).

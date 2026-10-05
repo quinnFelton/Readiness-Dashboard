@@ -22,10 +22,15 @@ export async function startConnection(
   }
 }
 
-export async function disconnectProvider(provider: string): Promise<ActionResult> {
+export async function disconnectProvider(
+  provider: string,
+  deleteData = false,
+): Promise<ActionResult> {
   if (!PROVIDER_RE.test(provider)) return { ok: false, error: 'Unknown provider.' };
   try {
-    const res = await apiFetch(`/connections/${provider}`, { method: 'DELETE' });
+    // History is kept unless the user ticked the erase box (PLAN §10 flow 8, §12).
+    const query = deleteData === true ? '?deleteData=true' : '';
+    const res = await apiFetch(`/connections/${provider}${query}`, { method: 'DELETE' });
     if (!res.ok) return { ok: false, error: 'Could not disconnect. Please try again.' };
     revalidatePath('/settings/connections');
     return { ok: true };

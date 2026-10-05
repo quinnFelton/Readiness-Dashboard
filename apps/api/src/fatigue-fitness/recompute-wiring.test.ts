@@ -70,7 +70,10 @@ async function seedHistory(userId: string, source: string, opts: { efforts?: boo
   }
 }
 
-const count = async (table: 'trends' | 'readiness_scores', userId: string) =>
+const count = async (
+  table: 'trends' | 'readiness_scores' | 'daily_metrics' | 'provider_connections',
+  userId: string,
+) =>
   Number(
     (
       await pool.query<{ n: string }>(`SELECT count(*) AS n FROM ${table} WHERE user_id = $1`, [
@@ -448,7 +451,41 @@ describe('oura sync and webhook → trends', () => {
 
 // ---------------------------------------------------------------- Disconnect (PLAN §10 flow 8)
 
-describe('disconnect → trends rebuilt from what remains', () => {
+describe('disconnect → history kept by default', () => {
+  it('keeps old trend and readiness rows and still refreshes the window', async () => {
+    await seedHistory(a, 'oura');
+    await pool.query(
+      `INSERT INTO provider_connections (user_id, provider, role, is_active)
+       VALUES ($1, 'oura', 'daily_metrics_source', false)`,
+      [a],
+    );
+    // A score from long before the recompute window: only an erase may remove it.
+    await pool.query(
+      `INSERT INTO readiness_scores (user_id, date, score, components_jsonb)
+       VALUES ($1, '2020-01-01', 70, '{}')`,
+      [a],
+    );
+    const registry = createAdapterRegistry();
+    await new ConnectionService(
+      pool,
+      registry,
+      cipher,
+      new ConnectionConfigService(pool, registry),
+    ).disconnect(a, 'oura');
+
+    expect(await count('provider_connections', a)).toBe(0);
+    expect(await count('daily_metrics', a)).toBeGreaterThan(0);
+    expect(await count('readiness_scores', a)).toBeGreaterThan(1);
+    const { rows } = await pool.query(
+      `SELECT 1 FROM readiness_scores WHERE user_id = $1 AND date = '2020-01-01'`,
+      [a],
+    );
+    expect(rows).toHaveLength(1);
+    expect(await trendDays(a)).toContain(today()); // the kept data still feeds the classifier
+  });
+});
+
+describe('disconnect with deleteData → trends rebuilt from what remains', () => {
   it('drops the provider, rebuilds the window from the other source, touches no one else', async () => {
     await seedHistory(a, 'oura');
     await seedHistory(a, 'terra', { efforts: false });
@@ -468,7 +505,7 @@ describe('disconnect → trends rebuilt from what remains', () => {
     );
     expect(await count('trends', a)).toBe(0);
 
-    await conns.disconnect(a, 'oura');
+    await conns.disconnect(a, 'oura', { deleteData: true });
 
     const { rows } = await pool.query(
       `SELECT DISTINCT source FROM daily_metrics WHERE user_id = $1`,
@@ -498,7 +535,7 @@ describe('disconnect → trends rebuilt from what remains', () => {
       registry,
       cipher,
       new ConnectionConfigService(pool, registry),
-    ).disconnect(a, 'oura');
+    ).disconnect(a, 'oura', { deleteData: true });
     expect(await count('trends', a)).toBe(0);
     expect(await count('readiness_scores', a)).toBe(0);
   });

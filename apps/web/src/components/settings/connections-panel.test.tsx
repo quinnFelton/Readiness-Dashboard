@@ -84,7 +84,7 @@ describe('ProviderCard', () => {
   it('shows the error returned by a failed disconnect', async () => {
     card({ connection: conn(), onDisconnect: vi.fn().mockResolvedValue('Nope') });
     fireEvent.click(screen.getByText('Disconnect'));
-    fireEvent.click(screen.getByText('Disconnect and delete data'));
+    fireEvent.click(screen.getByText('Disconnect and keep data'));
     await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Nope'));
   });
 });

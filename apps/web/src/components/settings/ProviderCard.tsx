@@ -24,9 +24,11 @@ export function ProviderCard({
   /** Radio for activity role, checkbox for daily role. */
   selectControl: { type: 'radio' | 'checkbox'; onChange: (checked: boolean) => void };
   onConnect: () => Promise<string | null>;
-  onDisconnect: () => Promise<string | null>;
+  /** `deleteData` is true only when the user ticked the erase box (PLAN §10 flow 8, §12). */
+  onDisconnect: (deleteData: boolean) => Promise<string | null>;
 }) {
   const [confirming, setConfirming] = useState(false);
+  const [deleteData, setDeleteData] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const connected = connection?.isActive === true;
@@ -38,6 +40,7 @@ export function ProviderCard({
     setError(err);
     setBusy(false);
     setConfirming(false);
+    setDeleteData(false);
   }
 
   return (
@@ -82,21 +85,41 @@ export function ProviderCard({
           className="mt-3 rounded border border-red-500/50 p-3 text-sm"
         >
           <p>
-            Disconnecting {provider.displayName} will delete its stored tokens and the data derived
-            from it (metrics and scores). This cannot be undone.
+            Disconnecting {provider.displayName} deletes its stored tokens and stops new data
+            arriving. Your history stays, so your trends carry on if you switch devices.
           </p>
+          <label className="mt-2 flex items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={deleteData}
+              disabled={busy}
+              onChange={(e) => setDeleteData(e.target.checked)}
+            />
+            <span>
+              Also delete the data already synced from {provider.displayName} (metrics and scores).
+              This cannot be undone.
+            </span>
+          </label>
           <div className="mt-2 flex gap-2">
             <button
               type="button"
               disabled={busy}
-              onClick={() => run(onDisconnect)}
+              onClick={() => run(() => onDisconnect(deleteData))}
               className="rounded bg-red-600 px-3 py-1.5 text-white disabled:opacity-40"
             >
-              {busy ? 'Deleting…' : 'Disconnect and delete data'}
+              {busy
+                ? 'Disconnecting…'
+                : deleteData
+                  ? 'Disconnect and delete data'
+                  : 'Disconnect and keep data'}
             </button>
             <button
               type="button"
-              onClick={() => setConfirming(false)}
+              onClick={() => {
+                setConfirming(false);
+                setDeleteData(false);
+              }}
               className="rounded border px-3 py-1.5"
             >
               Cancel

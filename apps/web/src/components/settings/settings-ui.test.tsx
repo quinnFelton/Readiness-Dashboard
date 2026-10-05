@@ -45,8 +45,7 @@ describe('ProviderCard disconnect', () => {
     connectedAt: '2026-01-01T00:00:00Z',
   };
 
-  it('requires confirmation that derived data is deleted', async () => {
-    const onDisconnect = vi.fn().mockResolvedValue(null);
+  const renderCard = (onDisconnect: (deleteData: boolean) => Promise<string | null>) =>
     render(
       <ProviderCard
         provider={provider}
@@ -57,10 +56,35 @@ describe('ProviderCard disconnect', () => {
         onDisconnect={onDisconnect}
       />,
     );
+
+  it('requires confirmation and keeps the history by default', async () => {
+    const onDisconnect = vi.fn().mockResolvedValue(null);
+    renderCard(onDisconnect);
     fireEvent.click(screen.getByText('Disconnect'));
     expect(onDisconnect).not.toHaveBeenCalled();
-    expect(screen.getByRole('alertdialog').textContent).toMatch(/derived from it/);
-    fireEvent.click(screen.getByText('Disconnect and delete data'));
+    expect(screen.getByRole('alertdialog').textContent).toMatch(/Your history stays/);
+    expect(screen.queryByText('Disconnect and delete data')).toBeNull();
+    fireEvent.click(screen.getByText('Disconnect and keep data'));
     await waitFor(() => expect(onDisconnect).toHaveBeenCalledOnce());
+    expect(onDisconnect).toHaveBeenCalledWith(false);
+  });
+
+  it('deletes the data only after the erase box is ticked', async () => {
+    const onDisconnect = vi.fn().mockResolvedValue(null);
+    renderCard(onDisconnect);
+    fireEvent.click(screen.getByText('Disconnect'));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also delete the data already synced/ }));
+    expect(screen.getByRole('alertdialog').textContent).toMatch(/cannot be undone/);
+    fireEvent.click(screen.getByText('Disconnect and delete data'));
+    await waitFor(() => expect(onDisconnect).toHaveBeenCalledWith(true));
+  });
+
+  it('cancelling clears a ticked erase box', () => {
+    renderCard(vi.fn().mockResolvedValue(null));
+    fireEvent.click(screen.getByText('Disconnect'));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Also delete the data already synced/ }));
+    fireEvent.click(screen.getByText('Cancel'));
+    fireEvent.click(screen.getByText('Disconnect'));
+    expect(screen.getByText('Disconnect and keep data')).toBeTruthy();
   });
 });

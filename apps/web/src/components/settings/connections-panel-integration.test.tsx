@@ -180,17 +180,31 @@ describe('connect starts the right flow', () => {
 });
 
 describe('disconnect confirmation', () => {
-  it('states that derived data will be deleted, then disconnects that provider and refreshes', async () => {
+  const openDialog = async () => {
     actions.disconnectProvider.mockResolvedValue({ ok: true });
     await renderPanel(['oura'], [conn('oura', 'daily_metrics_source')]);
     const card = screen.getByText('Oura Ring').closest('li') as HTMLElement;
     fireEvent.click(within(card).getByRole('button', { name: 'Disconnect' }));
-    const dialog = within(card).getByRole('alertdialog', { name: 'Disconnect Oura Ring' });
-    expect(dialog).toHaveTextContent(/delete its stored tokens and the data derived from it/);
-    expect(dialog).toHaveTextContent(/cannot be undone/);
+    return within(card).getByRole('alertdialog', { name: 'Disconnect Oura Ring' });
+  };
+
+  it('states that the history stays, then disconnects that provider without deleting and refreshes', async () => {
+    const dialog = await openDialog();
+    expect(dialog).toHaveTextContent(/deletes its stored tokens/);
+    expect(dialog).toHaveTextContent(/Your history stays/);
     expect(actions.disconnectProvider).not.toHaveBeenCalled();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Disconnect and delete data' }));
-    await waitFor(() => expect(actions.disconnectProvider).toHaveBeenCalledWith('oura'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Disconnect and keep data' }));
+    await waitFor(() => expect(actions.disconnectProvider).toHaveBeenCalledWith('oura', false));
     await waitFor(() => expect(refresh).toHaveBeenCalled());
+  });
+
+  it('asks for the erase only when the box is ticked', async () => {
+    const dialog = await openDialog();
+    fireEvent.click(
+      within(dialog).getByRole('checkbox', { name: /Also delete the data already synced/ }),
+    );
+    expect(dialog).toHaveTextContent(/cannot be undone/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Disconnect and delete data' }));
+    await waitFor(() => expect(actions.disconnectProvider).toHaveBeenCalledWith('oura', true));
   });
 });
