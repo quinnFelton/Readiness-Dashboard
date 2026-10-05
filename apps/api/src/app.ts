@@ -1,4 +1,7 @@
 import express, { type Express } from 'express';
+import { type RateLimitOptions, createRateLimiter } from './middleware/rate-limit';
+import { safeErrorHandler } from './middleware/safe-error';
+import { privacyRouter } from './privacy/routes';
 import { athleteEventsRouter } from './athlete-events/routes';
 import { authRouter } from './auth/routes';
 import { comparisonRouter } from './comparison/routes';
@@ -23,6 +26,11 @@ export interface CreateAppOptions {
   mount?: 'all' | 'api' | 'webhooks';
   /** Webhook routers to mount when webhooks are mounted. Default: all of WEBHOOK_PROVIDERS. */
   webhookProviders?: readonly WebhookProvider[];
+  /**
+   * Local-dev stand-in for API Gateway's stage throttle (PLAN §12). server.ts turns it on; Lambda
+   * entrypoints leave it off because API Gateway does the throttling there.
+   */
+  rateLimit?: RateLimitOptions | null;
 }
 
 // The same Express app runs locally (server.ts) and in Lambda via serverless-http (lambda.ts, and the
@@ -36,6 +44,7 @@ export function createApp(opts: CreateAppOptions = {}): Express {
 
   const app = express();
   app.disable('x-powered-by');
+  if (opts.rateLimit) app.use(createRateLimiter(opts.rateLimit));
 
   // Provider webhooks (PLAN §6) are mounted BEFORE the global express.json(): Terra and Oura verify
   // an HMAC over the exact raw bytes (CLAUDE.md rule 7), so each router brings its own body parser
@@ -61,6 +70,7 @@ export function createApp(opts: CreateAppOptions = {}): Express {
   });
   v1.use('/auth', authRouter());
   v1.use('/users', usersRouter());
+  v1.use('/users', privacyRouter()); // /:userId/export and DELETE /:userId: self or master
   v1.use('/connections', connectionsRouter()); // requireUser is applied inside the router
   // Phase 5b (PLAN §8.4, §8.7, §8.8). Each router applies requireUser + requireSelfOrMaster (or
   // requireMaster for /comparison) on its own routes, server-side (CLAUDE.md rule 3).
@@ -70,6 +80,7 @@ export function createApp(opts: CreateAppOptions = {}): Express {
   v1.use('/athlete-events', athleteEventsRouter());
   v1.use('/comparison', comparisonRouter()); // master only
   app.use('/api/v1', v1);
+  app.use(safeErrorHandler);
 
   return app;
 }

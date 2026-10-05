@@ -5,6 +5,7 @@ import type { TokenCipher } from '../crypto/token-cipher';
 import type { ConnectionConfigService } from './config-service';
 import { loadFatigueFitnessConfig } from '../fatigue-fitness/config';
 import { type Recompute, lastDays, sharedRecompute } from '../fatigue-fitness/recompute';
+import { revokeProviderGrants } from '../privacy/revoke';
 import { HttpError } from './errors';
 
 interface ConnectionRow {
@@ -94,6 +95,11 @@ export class ConnectionService {
       return toConnection(rows[0] as ConnectionRow);
     } catch (err) {
       await client.query('ROLLBACK');
+      // Security review M2: uq_provider_connections_external_active. Another local user already
+      // holds this provider account; refuse instead of letting webhooks route to the wrong person.
+      if ((err as { code?: string }).code === '23505') {
+        throw new HttpError(409, 'this provider account is already linked to another user');
+      }
       throw err;
     } finally {
       client.release();
@@ -130,10 +136,22 @@ export class ConnectionService {
     opts: { deleteData?: boolean } = {},
   ): Promise<void> {
     const deleteData = opts.deleteData === true;
+    // End the grant at the provider while we still hold the tokens (security review M1). Best
+    // effort and bounded: a provider outage must not stop the user disconnecting locally.
+    await revokeProviderGrants(
+      { pool: this.pool, registry: this.registry, cipher: this.cipher },
+      userId,
+      [provider],
+    );
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
       if (deleteData) {
+        // Receipts of this provider's events (ids, athlete/user references) go with the erase.
+        await client.query(`DELETE FROM webhook_events WHERE user_id = $1 AND provider = $2`, [
+          userId,
+          provider,
+        ]);
         await client.query(`DELETE FROM daily_metrics WHERE user_id = $1 AND source = $2`, [
           userId,
           provider,

@@ -16,6 +16,16 @@ declare global {
   }
 }
 
+/**
+ * Marks a handler as an authorization guard so the route-enumeration test (routes-guarded.test.ts)
+ * can prove every route has one without parsing source. Behaviour is unchanged.
+ */
+export const GUARD = Symbol.for('rd.rbac.guard');
+export type GuardInfo =
+  { kind: 'user' } | { kind: 'master' } | { kind: 'self-or-master'; param: string };
+const tagGuard = <T extends RequestHandler>(fn: T, info: GuardInfo): T =>
+  Object.assign(fn, { [GUARD]: info });
+
 function bearer(req: Request): string | null {
   const h = req.headers.authorization;
   if (!h) return null;
@@ -51,7 +61,7 @@ export const requireUser: RequestHandler = async (
 };
 
 /** Must run after requireUser. 403 unless role is master. */
-export const requireMaster: RequestHandler = (req, res, next) => {
+const requireMasterHandler: RequestHandler = (req, res, next) => {
   if (!req.user) {
     res.status(401).json({ error: 'unauthenticated' });
     return;
@@ -62,22 +72,27 @@ export const requireMaster: RequestHandler = (req, res, next) => {
   }
   next();
 };
+tagGuard(requireUser, { kind: 'user' });
+export const requireMaster: RequestHandler = tagGuard(requireMasterHandler, { kind: 'master' });
 
 /**
  * Must run after requireUser. Master passes for any target; a `user` passes only when
  * `req.params[paramName]` is their own id. A missing param is denied (fail closed).
  */
 export function requireSelfOrMaster(paramName: string): RequestHandler {
-  return (req, res, next) => {
-    if (!req.user) {
-      res.status(401).json({ error: 'unauthenticated' });
-      return;
-    }
-    const target = req.params[paramName];
-    if (req.user.role === 'master' || (typeof target === 'string' && target === req.user.id)) {
-      next();
-      return;
-    }
-    res.status(403).json({ error: 'forbidden' });
-  };
+  return tagGuard(
+    (req, res, next) => {
+      if (!req.user) {
+        res.status(401).json({ error: 'unauthenticated' });
+        return;
+      }
+      const target = req.params[paramName];
+      if (req.user.role === 'master' || (typeof target === 'string' && target === req.user.id)) {
+        next();
+        return;
+      }
+      res.status(403).json({ error: 'forbidden' });
+    },
+    { kind: 'self-or-master', param: paramName },
+  );
 }
