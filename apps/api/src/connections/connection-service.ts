@@ -4,6 +4,7 @@ import type pg from 'pg';
 import type { TokenCipher } from '../crypto/token-cipher';
 import type { ConnectionConfigService } from './config-service';
 import { loadFatigueFitnessConfig } from '../fatigue-fitness/config';
+import { markHistoryDirty } from '../fatigue-fitness/history-rebuild';
 import { type Recompute, lastDays, sharedRecompute } from '../fatigue-fitness/recompute';
 import { revokeProviderGrants } from '../privacy/revoke';
 import { HttpError } from './errors';
@@ -174,6 +175,11 @@ export class ConnectionService {
         // dashboard cannot show numbers from data the user asked us to erase (PLAN §12).
         await client.query(`DELETE FROM trends WHERE user_id = $1`, [userId]);
         await client.query(`DELETE FROM readiness_scores WHERE user_id = $1`, [userId]);
+        // The erase wiped the user's whole trend history; only the last BASELINE_LONG_DAYS are
+        // rebuilt below. Queue the rest (data from the user's OTHER sources) for the history
+        // rebuild job, in this same transaction so the request cannot be lost (owner decision
+        // 2026-10-04).
+        await markHistoryDirty(client, userId);
       }
       await client.query('COMMIT');
     } catch (err) {

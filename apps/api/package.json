@@ -11,6 +11,7 @@
     "db:migrate": "node-pg-migrate up --migrations-dir db/migrations --migration-file-language sql --envPath ../../.env",
     "db:migrate:down": "node-pg-migrate down --migrations-dir db/migrations --migration-file-language sql --envPath ../../.env",
     "db:seed": "tsx --env-file=../../.env db/seed/seed.ts",
+    "rebuild-history": "tsx --env-file=../../.env scripts/rebuild-history.ts",
     "db:migrate:create": "node-pg-migrate create --migrations-dir db/migrations --migration-file-language sql"
   },
   "dependencies": {
