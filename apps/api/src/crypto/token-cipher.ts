@@ -56,23 +56,80 @@ export class LocalAesGcmCipher implements TokenCipher {
 }
 
 /**
- * Prod implementation placeholder (phase 8 wires AWS). Same interface; KMS Encrypt/Decrypt with
- * EncryptionContext = { ctx: context } will replace the throws. No AWS SDK dependency yet.
+ * KMS encryption context bound to the data key. The IAM policies in infra/cdk pin
+ * `kms:EncryptionContext:purpose` to this value (infra/cdk/lib/constants.ts must stay in sync).
+ */
+export const TOKEN_DATA_KEY_CONTEXT = { purpose: 'rd-token-data-key' } as const;
+
+/** The only KMS surface this class needs; lets tests inject a fake instead of hitting AWS. */
+export interface KmsDecryptClient {
+  send(command: unknown): Promise<{ Plaintext?: Uint8Array }>;
+}
+
+export interface KmsTokenCipherOptions {
+  /** Base64 of the KMS-encrypted 32-byte data key (`CiphertextBlob`). Safe to keep in env/config. */
+  encryptedDataKey?: string;
+  client?: KmsDecryptClient;
+}
+
+/**
+ * Prod implementation (PLAN §11/§12): envelope encryption. One AES-256 data key is stored
+ * KMS-encrypted; it is decrypted ONCE per process (cold start) and then LocalAesGcmCipher does the
+ * per-token work with the same `context` AAD and ciphertext layout as dev. No KMS call per token.
+ * Lambdas therefore need only `kms:Decrypt` (on the data key, with the encryption context above).
  */
 export class KmsTokenCipher implements TokenCipher {
-  constructor(readonly keyId: string) {}
+  private inner?: Promise<LocalAesGcmCipher>;
 
-  async encrypt(_plaintext: string, _context?: string): Promise<Buffer> {
-    throw new Error('KmsTokenCipher.encrypt is not implemented yet');
+  constructor(
+    readonly keyId: string,
+    private readonly opts: KmsTokenCipherOptions = {},
+  ) {}
+
+  private load(): Promise<LocalAesGcmCipher> {
+    this.inner ??= this.fetchDataKey().catch((err: unknown) => {
+      this.inner = undefined; // let the next call retry (e.g. transient KMS throttling)
+      throw err;
+    });
+    return this.inner;
   }
 
-  async decrypt(_ciphertext: Buffer, _context?: string): Promise<string> {
-    throw new Error('KmsTokenCipher.decrypt is not implemented yet');
+  private async fetchDataKey(): Promise<LocalAesGcmCipher> {
+    if (!this.opts.encryptedDataKey) {
+      throw new Error('KMS_ENCRYPTED_DATA_KEY is required when using KmsTokenCipher');
+    }
+    // Imported lazily so local dev/tests that never use KMS don't load the AWS SDK.
+    const { KMSClient, DecryptCommand } = await import('@aws-sdk/client-kms');
+    const client: KmsDecryptClient = this.opts.client ?? new KMSClient({});
+    const out = await client.send(
+      new DecryptCommand({
+        CiphertextBlob: Buffer.from(this.opts.encryptedDataKey, 'base64'),
+        KeyId: this.keyId,
+        EncryptionContext: { ...TOKEN_DATA_KEY_CONTEXT },
+      }),
+    );
+    if (!out.Plaintext) throw new Error('KMS returned no plaintext for the data key');
+    const key = Buffer.from(out.Plaintext);
+    try {
+      return new LocalAesGcmCipher(key.toString('base64'));
+    } finally {
+      key.fill(0);
+    }
+  }
+
+  async encrypt(plaintext: string, context?: string): Promise<Buffer> {
+    return (await this.load()).encrypt(plaintext, context);
+  }
+
+  async decrypt(ciphertext: Buffer, context?: string): Promise<string> {
+    return (await this.load()).decrypt(ciphertext, context);
   }
 }
 
 /** KMS when running in production with KMS_KEY_ID; otherwise the local AES key. */
 export function createTokenCipher(env: NodeJS.ProcessEnv = process.env): TokenCipher {
-  if (env.NODE_ENV === 'production' && env.KMS_KEY_ID) return new KmsTokenCipher(env.KMS_KEY_ID);
+  if (env.NODE_ENV === 'production' && env.KMS_KEY_ID) {
+    return new KmsTokenCipher(env.KMS_KEY_ID, { encryptedDataKey: env.KMS_ENCRYPTED_DATA_KEY });
+  }
   return new LocalAesGcmCipher(env.TOKEN_ENCRYPTION_KEY);
 }
