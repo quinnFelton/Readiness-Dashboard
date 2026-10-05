@@ -43,6 +43,13 @@ export interface FetchResult {
   refreshedGrant?: ConnectionGrant;
 }
 
+/** Plaintext credentials of one connection, decrypted just for a revoke call. Never log. */
+export interface RevokeContext {
+  externalUserId?: string | null;
+  accessToken?: string;
+  refreshToken?: string;
+}
+
 export interface ProviderAdapter<T> {
   role: ConnectionRole;
   /** "oura", "strava", "terra", future: "garmin", ... */
@@ -59,4 +66,10 @@ export interface ProviderAdapter<T> {
   handleCallback(ctx: CallbackContext): Promise<ConnectionGrant>;
   /** Optional: push-only providers (Terra) deliver via webhook and omit this. */
   fetchRaw?(ctx: FetchContext): Promise<FetchResult>;
+  /**
+   * Optional (phase 9, security review M1): ends the grant at the provider so a token copied earlier
+   * stops working and the provider stops pushing events. Callers treat it as best effort and bound
+   * it with a timeout; implementations must not log or embed the tokens in thrown errors.
+   */
+  revoke?(ctx: RevokeContext): Promise<void>;
 }

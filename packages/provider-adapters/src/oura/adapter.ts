@@ -6,6 +6,7 @@ import type {
   FetchContext,
   FetchResult,
   ProviderAdapter,
+  RevokeContext,
   StartContext,
   StartResult,
 } from '../types';
@@ -104,6 +105,19 @@ export class OuraAdapter implements ProviderAdapter<NormalizedDailyMetric> {
     }
     u.searchParams.set('state', ctx.state); // passed through unchanged; the API verifies it on callback
     return { redirectUrl: u.toString() };
+  }
+
+  /**
+   * https://cloud.ouraring.com/docs/authentication (verified 2026-10-04): GET /oauth/revoke with the
+   * token as the `access_token` query parameter. The URL carries the token, so errors here are
+   * status-only and nothing is logged. Sandbox grants are fake and need no call.
+   */
+  async revoke(ctx: RevokeContext): Promise<void> {
+    if (this.cfg.sandbox || !ctx.accessToken) return;
+    const u = new URL('/oauth/revoke', this.cfg.apiBaseUrl);
+    u.searchParams.set('access_token', ctx.accessToken);
+    const res = await this.http(u.toString());
+    if (!res.ok) throw new OuraHttpError(res.status);
   }
 
   async handleCallback(ctx: CallbackContext): Promise<ConnectionGrant> {
