@@ -37,6 +37,8 @@ export function createStravaAdapter(
   return {
     role: 'activity_source',
     key: STRAVA_PROVIDER_KEY,
+    displayName: 'Strava',
+    connectFlow: 'oauth',
 
     normalize(raw: unknown): NormalizedActivityEffort[] {
       const p = raw as Partial<StravaActivityPayload> | null;

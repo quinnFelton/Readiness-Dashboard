@@ -1,0 +1,114 @@
+'use client';
+import type { ProviderConnection } from '@rd/shared-types';
+import { useState } from 'react';
+import type { RegisteredProvider } from '@/app/settings/_lib/types';
+
+export function describeStatus(c: ProviderConnection | undefined, now = Date.now()): string {
+  if (!c) return 'Not connected';
+  if (!c.isActive) return 'Disconnected';
+  if (c.expiresAt && Date.parse(c.expiresAt) < now) return 'Needs reconnecting (token expired)';
+  return 'Connected';
+}
+
+export function ProviderCard({
+  provider,
+  connection,
+  selected,
+  selectControl,
+  onConnect,
+  onDisconnect,
+}: {
+  provider: RegisteredProvider;
+  connection?: ProviderConnection;
+  selected: boolean;
+  /** Radio for activity role, checkbox for daily role. */
+  selectControl: { type: 'radio' | 'checkbox'; onChange: (checked: boolean) => void };
+  onConnect: () => Promise<string | null>;
+  onDisconnect: () => Promise<string | null>;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const connected = connection?.isActive === true;
+
+  async function run(fn: () => Promise<string | null>) {
+    setBusy(true);
+    setError(null);
+    const err = await fn();
+    setError(err);
+    setBusy(false);
+    setConfirming(false);
+  }
+
+  return (
+    <li className="rounded-lg border p-4">
+      <div className="flex items-center gap-3">
+        <input
+          type={selectControl.type}
+          name={selectControl.type === 'radio' ? 'activity-source' : undefined}
+          aria-label={`Use ${provider.displayName}`}
+          checked={selected}
+          onChange={(e) => selectControl.onChange(e.target.checked)}
+        />
+        <div className="flex-1">
+          <p className="font-medium">{provider.displayName}</p>
+          <p className="text-sm opacity-70">
+            {describeStatus(connection)}
+            {connected && (
+              <>
+                {' · Last sync: '}
+                {connection?.lastSyncedAt
+                  ? new Date(connection.lastSyncedAt).toLocaleString()
+                  : 'not yet synced'}
+              </>
+            )}
+          </p>
+        </div>
+        {!confirming && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => (connected ? setConfirming(true) : run(onConnect))}
+            className="rounded border px-3 py-1.5 disabled:opacity-40"
+          >
+            {connected ? 'Disconnect' : busy ? 'Connecting…' : 'Connect'}
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-label={`Disconnect ${provider.displayName}`}
+          className="mt-3 rounded border border-red-500/50 p-3 text-sm"
+        >
+          <p>
+            Disconnecting {provider.displayName} will delete its stored tokens and the data derived
+            from it (metrics and scores). This cannot be undone.
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => run(onDisconnect)}
+              className="rounded bg-red-600 px-3 py-1.5 text-white disabled:opacity-40"
+            >
+              {busy ? 'Deleting…' : 'Disconnect and delete data'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="rounded border px-3 py-1.5"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      )}
+    </li>
+  );
+}
