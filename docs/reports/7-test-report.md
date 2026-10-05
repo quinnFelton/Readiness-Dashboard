@@ -88,3 +88,12 @@ Hydration-sensitive clicks (Connect, Disconnect) retry via `expect(...).toPass()
 - **Root `.gitignore` / `.prettierignore`:** not needed; saved sessions live under the already-ignored
   `test-results/`.
 - When bugs 1–3 are fixed, delete the `test.fail()` lines; the assertions are already written.
+
+## Independent verification (tester run)
+
+- `pnpm db:migrate`: nothing to run. `pnpm typecheck` and `pnpm lint` are clean (including `tsc -p tests/e2e`).
+- `pnpm test:e2e`: 41/41 as expected (38 pass; 3 `test.fail()` fail as annotated: login error page, roster sources/last sync, disconnect readiness score). Every PLAN §10 flow (1–8) has tests. Chart points (flow 5), the built-app `/admin` redirect (flow 7) and the post-disconnect dashboard (flow 8) are all asserted.
+- **`pnpm test` fails: 1 test, `apps/api/src/connections/connections.test.ts:226-227` ("syncAll covers every user with config").**
+  Expected `daily_metrics` count for user b = 1, actual 0 (the line number moves between runs, so it is order-dependent). Likely cause, inferred from reading the test and not confirmed by querying the DB (psql was denied here): the e2e seed leaves `connection_configs` / connections for `user01`/`user02` in the shared `DATABASE_URL`. `syncAll()` iterates all users with config, so it consumes the test's two queued Oura responses on e2e users first and leaves `b` empty. The e2e suite therefore makes the API unit suite fail on a shared DB. This is a test-isolation defect in the e2e seed or in the unit test (which should scope `syncAll`). It was not fixed here, since I may only edit tests and the report, and the unit test is outside phase 7. Suggested fix: e2e global setup should use a separate database, or the unit test should clean the config table first.
+  Since the e2e seed persists after the run, CI needs the e2e job and unit job on separate Postgres instances (they already are separate jobs).
+- Risks untested: Terra redirect-only connection path (observation above); real provider field names (all stubbed); CI job not executed locally.
