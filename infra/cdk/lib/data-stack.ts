@@ -135,10 +135,26 @@ export class DataStack extends Stack {
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       securityGroups: [this.dbSg],
       storageEncrypted: true,
+      // Every function except `migrate` logs in as its own Postgres role with an IAM token (no
+      // password). Requires TLS, which every client already verifies (pool.ts).
+      // https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/UsingWithRDS.IAMDBAuth.html
+      iamAuthentication: true,
       backup: { retention: Duration.days(config.db.backupDays) },
       deletionProtection: config.isProd,
       removalPolicy: config.isProd ? RemovalPolicy.SNAPSHOT : RemovalPolicy.DESTROY,
     });
+
+    // Master password rotation (stage E item). Now that only `migrate` holds the master credential and
+    // reads it from Secrets Manager on every run, rotating it is safe: nothing caches it. A hosted
+    // rotation Lambda runs in the app subnets (they have NAT egress to reach Secrets Manager; the
+    // isolated DB subnets do not). It wakes Aurora once per interval, which costs nothing noticeable.
+    // https://docs.aws.amazon.com/secretsmanager/latest/userguide/rotate-secrets_turn-on-for-db.html
+    if (config.db.rotationDays > 0) {
+      this.cluster.addRotationSingleUser({
+        automaticallyAfter: Duration.days(config.db.rotationDays),
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      });
+    }
 
     // ---- Secrets Manager entries ---------------------------------------------------------------
     const name = (n: string) => `${config.secretPrefix}/${n}`;

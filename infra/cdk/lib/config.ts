@@ -18,7 +18,14 @@ export interface InfraConfig {
   natMode: NatMode;
   alarmEmail?: string;
   logRetentionDays: number;
-  db: { minAcu: number; maxAcu: number; autoPauseMinutes: number; backupDays: number };
+  db: {
+    minAcu: number;
+    maxAcu: number;
+    autoPauseMinutes: number;
+    backupDays: number;
+    /** Master password rotation interval in days; 0 = off. Only the `migrate` function uses it. */
+    rotationDays: number;
+  };
   throttle: { rateLimit: number; burstLimit: number };
   /**
    * Tighter per-route limit for the unauthenticated Strava POST (security review M4): real traffic is
@@ -31,7 +38,15 @@ export interface InfraConfig {
     ouraSubscriptions?: string;
     stravaReplay?: string;
     webhookTtl?: string;
+    /** Works through queued history-rebuild requests (bounded per run). */
+    historyRebuild?: string;
   };
+  /** Per-invocation bounds of the history rebuild (apps/api/src/fatigue-fitness/history-rebuild.ts). */
+  historyRebuild: { maxDates: number; maxUsers: number };
+  /** A failing Strava webhook event is retried this many times, then abandoned (rule 9: config). */
+  stravaReplayMaxAttempts: number;
+  /** Deploy the one-off first-master function (DEPLOY.md). Default false; remove it after use. */
+  enableFirstMaster: boolean;
   webhookTtlDays: number;
   ouraSandbox: boolean;
   web: {
@@ -105,7 +120,13 @@ export function loadConfig(node: Node): InfraConfig {
     natMode,
     alarmEmail: ctx('alarmEmail'),
     logRetentionDays: num('logRetentionDays', isProd ? 30 : 14, 1),
-    db: { minAcu, maxAcu, autoPauseMinutes, backupDays: num('dbBackupDays', isProd ? 7 : 1, 1) },
+    db: {
+      minAcu,
+      maxAcu,
+      autoPauseMinutes,
+      backupDays: num('dbBackupDays', isProd ? 7 : 1, 1),
+      rotationDays: num('dbRotationDays', 30, 0),
+    },
     throttle: { rateLimit: num('throttleRate', 20, 1), burstLimit: num('throttleBurst', 40, 1) },
     stravaWebhookThrottle: {
       rateLimit: num('throttleStravaRate', 5, 1),
@@ -120,7 +141,15 @@ export function loadConfig(node: Node): InfraConfig {
       // few-minute tick would keep the database awake around the clock.
       stravaReplay: schedule('stravaReplaySchedule', 'rate(6 hours)'),
       webhookTtl: schedule('webhookTtlSchedule', 'cron(5 10 * * ? *)'),
+      // Daily, right after the other daily jobs so Aurora is already awake (no extra resume).
+      historyRebuild: schedule('historyRebuildSchedule', 'cron(20 10 * * ? *)'),
     },
+    historyRebuild: {
+      maxDates: num('historyRebuildMaxDates', 120, 1),
+      maxUsers: num('historyRebuildMaxUsers', 10, 1),
+    },
+    stravaReplayMaxAttempts: num('stravaReplayMaxAttempts', 5, 1),
+    enableFirstMaster: bool('enableFirstMaster', false),
     webhookTtlDays: num('webhookTtlDays', 30, 1),
     ouraSandbox: bool('ouraSandbox', false),
     web: {
