@@ -1,12 +1,26 @@
 import { signIn } from '@/lib/auth';
 
-export default function LoginPage() {
+// Only same-origin relative paths are accepted (prevents open redirects).
+function safeCallbackUrl(raw: string | undefined): string {
+  if (raw && raw.startsWith('/') && !raw.startsWith('//') && !raw.includes('\\')) return raw;
+  return '/dashboard';
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string | string[] }>;
+}) {
+  const sp = await searchParams;
+  const cb = Array.isArray(sp.callbackUrl) ? sp.callbackUrl[0] : sp.callbackUrl;
+  const redirectTo = safeCallbackUrl(cb);
+
   async function login(formData: FormData) {
     'use server';
     await signIn('credentials', {
       email: formData.get('email'),
       password: formData.get('password'),
-      redirectTo: '/dashboard',
+      redirectTo,
     });
   }
 

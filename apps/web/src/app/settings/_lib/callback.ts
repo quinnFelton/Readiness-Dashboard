@@ -45,7 +45,11 @@ export async function completeOAuthCallback(
   }
 
   const qs = buildQueryString(query);
-  if (!qs.includes('code=') || !qs.includes('state=')) {
+  const has = (k: string) => {
+    const v = Array.isArray(query[k]) ? query[k]?.[0] : query[k];
+    return typeof v === 'string' && v.length > 0;
+  };
+  if (!has('code') || !has('state')) {
     return {
       status: 'error',
       message: 'The callback was missing required details. Please start again.',
