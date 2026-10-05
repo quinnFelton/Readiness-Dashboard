@@ -22,7 +22,12 @@ export function ProviderCard({
   connection?: ProviderConnection;
   selected: boolean;
   /** Radio for activity role, checkbox for daily role. */
-  selectControl: { type: 'radio' | 'checkbox'; onChange: (checked: boolean) => void };
+  selectControl: {
+    type: 'radio' | 'checkbox';
+    onChange: (checked: boolean) => void;
+    /** Not connected (and not already selected): can't be chosen yet. */
+    disabled?: boolean;
+  };
   onConnect: () => Promise<string | null>;
   /** `deleteData` is true only when the user ticked the erase box (PLAN §10 flow 8, §12). */
   onDisconnect: (deleteData: boolean) => Promise<string | null>;
@@ -51,6 +56,8 @@ export function ProviderCard({
           name={selectControl.type === 'radio' ? 'activity-source' : undefined}
           aria-label={`Use ${provider.displayName}`}
           checked={selected}
+          disabled={selectControl.disabled}
+          title={selectControl.disabled ? `Connect ${provider.displayName} first` : undefined}
           onChange={(e) => selectControl.onChange(e.target.checked)}
         />
         <div className="flex-1">

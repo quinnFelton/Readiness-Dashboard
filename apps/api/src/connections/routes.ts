@@ -89,6 +89,23 @@ export function connectionsRouter(deps: ConnectionsDeps = {}): Router {
         'expected activitySource (string|null) and/or dailyMetricsSources (string[])',
       );
     }
+    // Settings item: a provider can only be NEWLY selected while it is actively connected for this
+    // user (the UI disables the control, but the UI is never the control: CLAUDE.md rule 3).
+    // Providers already in the saved config stay allowed, so reordering precedence or deselecting a
+    // source whose token has since expired still works.
+    const [list, current] = await Promise.all([
+      connections().list(userId),
+      configs.getConfig(userId),
+    ]);
+    const connected = new Set(list.filter((c) => c.isActive).map((c) => c.provider));
+    const kept = new Set([current.activitySource, ...current.dailyMetricsSources]);
+    const wanted = [
+      ...(typeof activitySource === 'string' ? [activitySource] : []),
+      ...((dailyMetricsSources as string[] | undefined) ?? []),
+    ];
+    if (wanted.some((p) => !connected.has(p) && !kept.has(p))) {
+      throw new HttpError(400, 'connect a provider before selecting it');
+    }
     if (activitySource !== undefined) await configs.setActivitySource(userId, activitySource);
     if (dailyMetricsSources !== undefined) {
       await configs.setDailyMetricsSources(userId, dailyMetricsSources as string[]);
