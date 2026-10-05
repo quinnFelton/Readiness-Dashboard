@@ -7,6 +7,7 @@ import {
 import type pg from 'pg';
 import type { TokenCipher } from '../../crypto/token-cipher';
 import type { ActivityEffortService, EffortOutcome } from '../../efforts/activity-effort-service';
+import { type Recompute, sharedRecompute } from '../../fatigue-fitness/recompute';
 
 export type IngestOutcome = EffortOutcome | { status: 'deleted' };
 
@@ -18,6 +19,8 @@ export interface StravaIngestDeps {
   now?: () => Date;
   /** Refresh when the access token expires within this many seconds (PLAN §5.2). Default 900. */
   refreshSkewSec?: number;
+  /** Trend recompute after an activity lands or is removed (PLAN §8.4). Default: process-wide hook. */
+  recompute?: Recompute;
 }
 
 interface TokenRow {
@@ -121,8 +124,10 @@ export class StravaIngestService {
     const id = String(activityId);
     const token = await this.getAccessToken(userId);
     const activity = await this.d.client.getActivity(token, id);
+    const before = await this.activityDates(userId, id);
     if (!activity) {
       await this.d.efforts.deleteActivity(userId, id); // gone since the event was sent
+      await this.recompute(userId, before);
       return { status: 'deleted' };
     }
     // Selective stream fetch: only spend the streams call if the summary passes the filter.
@@ -134,12 +139,36 @@ export class StravaIngestService {
       `UPDATE provider_connections SET last_synced_at = $3 WHERE user_id = $1 AND provider = $2`,
       [userId, STRAVA_PROVIDER_KEY, this.now()],
     );
+    // Old and new dates: an update can move the ride or remove it (now filtered out).
+    await this.recompute(userId, [...before, ...(await this.activityDates(userId, id))]);
     return outcome;
   }
 
   /** Webhook `delete`. */
   async removeActivity(userId: string, activityId: number | string): Promise<number> {
-    return this.d.efforts.deleteActivity(userId, String(activityId));
+    const id = String(activityId);
+    const dates = await this.activityDates(userId, id);
+    const removed = await this.d.efforts.deleteActivity(userId, id);
+    if (removed > 0) await this.recompute(userId, dates);
+    return removed;
+  }
+
+  /**
+   * PLAN §8.4: compute on sync. The hook never throws, so a recompute failure can't fail the ingest
+   * or flip the webhook event to `failed`.
+   */
+  private recompute(userId: string, dates: string[]): Promise<void> {
+    return (this.d.recompute ?? sharedRecompute())(userId, 'activity', dates);
+  }
+
+  /** Days this activity currently has effort rows on (any deriver). */
+  private async activityDates(userId: string, externalActivityId: string): Promise<string[]> {
+    const { rows } = await this.d.pool.query<{ date: string }>(
+      `SELECT DISTINCT to_char(date, 'YYYY-MM-DD') AS date FROM activity_efforts
+        WHERE user_id = $1 AND external_activity_id = $2`,
+      [userId, externalActivityId],
+    );
+    return rows.map((r) => r.date);
   }
 
   /** Athlete deauthorized the app (event `updates.authorized = "false"`): drop credentials. */

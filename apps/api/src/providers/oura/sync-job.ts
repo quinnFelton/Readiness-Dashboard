@@ -5,6 +5,7 @@ import {
 } from '@rd/provider-adapters';
 import type pg from 'pg';
 import { type TokenCipher, createTokenCipher } from '../../crypto/token-cipher';
+import { type Recompute, sharedRecompute } from '../../fatigue-fitness/recompute';
 import { SyncService } from '../../sync/sync-service';
 import type { SyncResult } from '../../sync/sync-service';
 import { getPool } from '../../users/pool';
@@ -22,6 +23,8 @@ export interface OuraSyncDeps {
   cipher: TokenCipher;
   adapter: OuraAdapter;
   now?: () => Date;
+  /** Trend/readiness recompute after new data (PLAN §8.4). Default: the process-wide hook. */
+  recompute?: Recompute;
 }
 
 interface ConnRow {
@@ -41,6 +44,7 @@ interface ConnRow {
 export async function syncOuraUser(userId: string, deps: OuraSyncDeps): Promise<SyncResult> {
   const base = { provider: PROVIDER, dailyMetrics: 0, activityEfforts: 0 };
   const now = deps.now ?? (() => new Date());
+  let touched: string[] | undefined; // set only when the ingest succeeded
   const locked = await withOuraUserLock(deps.pool, userId, async (): Promise<SyncResult> => {
     const { rows } = await deps.pool.query<ConnRow>(
       `SELECT external_user_id, access_token_enc, refresh_token_enc, expires_at, last_synced_at
@@ -70,11 +74,13 @@ export async function syncOuraUser(userId: string, deps: OuraSyncDeps): Promise<
       // Reuses the framework's normalize + idempotent upsert path (stamps userId/source, no raw retained).
       const registry: AdapterRegistry = createAdapterRegistry();
       registry.register(deps.adapter);
-      const counts = await new SyncService(deps.pool, registry, deps.cipher, now).ingest(
-        userId,
-        PROVIDER,
-        result.raw,
-      );
+      const { dates, ...counts } = await new SyncService(
+        deps.pool,
+        registry,
+        deps.cipher,
+        now,
+      ).ingest(userId, PROVIDER, result.raw);
+      touched = dates;
       await deps.pool.query(
         `UPDATE provider_connections SET last_synced_at = $3 WHERE user_id = $1 AND provider = $2`,
         [userId, PROVIDER, startedAt],
@@ -87,7 +93,11 @@ export async function syncOuraUser(userId: string, deps: OuraSyncDeps): Promise<
       return { ...base, ok: false, error: err instanceof Error ? err.name : 'sync failed' };
     }
   });
-  return locked.acquired ? locked.value : { ...base, ok: false, error: 'SyncInProgress' };
+  if (!locked.acquired) return { ...base, ok: false, error: 'SyncInProgress' };
+  // PLAN §8.4: compute on sync. Outside the per-user lock (it doesn't touch tokens), and the hook
+  // never throws, so the sync result is unaffected by a recompute failure.
+  if (touched) await (deps.recompute ?? sharedRecompute())(userId, 'daily_metrics', touched);
+  return locked.value;
 }
 
 /** Encrypts and persists a (possibly refreshed) grant. Caller must hold the per-user lock. */

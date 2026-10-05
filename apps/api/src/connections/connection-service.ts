@@ -3,7 +3,8 @@ import type { ProviderConnection } from '@rd/shared-types';
 import type pg from 'pg';
 import type { TokenCipher } from '../crypto/token-cipher';
 import type { ConnectionConfigService } from './config-service';
-import { FatigueFitnessService } from '../fatigue-fitness/service';
+import { loadFatigueFitnessConfig } from '../fatigue-fitness/config';
+import { type Recompute, lastDays, sharedRecompute } from '../fatigue-fitness/recompute';
 import { HttpError } from './errors';
 
 interface ConnectionRow {
@@ -41,6 +42,8 @@ export class ConnectionService {
     private readonly registry: AdapterRegistry,
     private readonly cipher: TokenCipher,
     private readonly configs: ConnectionConfigService,
+    /** Trend/readiness rebuild after disconnect (PLAN §8.4). Default: the process-wide hook. */
+    private readonly recompute?: Recompute,
   ) {}
 
   async list(userId: string): Promise<ProviderConnection[]> {
@@ -145,15 +148,13 @@ export class ConnectionService {
     } finally {
       client.release();
     }
-    // Rebuild from whatever remains (e.g. another source). Best effort: the disconnect already
-    // succeeded, and a failed recompute must not turn it into an error.
-    try {
-      await new FatigueFitnessService(this.pool, this.configs).onSyncComplete(
-        userId,
-        'daily_metrics',
-      );
-    } catch {
-      // swallowed deliberately; messages may quote health data
-    }
+    // Rebuild the dashboard window from whatever remains (e.g. another source), PLAN §10 flow 8.
+    // Best effort: the disconnect already succeeded, and the hook never throws (it logs the error
+    // name only; messages may quote health data).
+    await (this.recompute ?? sharedRecompute())(
+      userId,
+      'daily_metrics',
+      lastDays(loadFatigueFitnessConfig().longDays),
+    );
   }
 }

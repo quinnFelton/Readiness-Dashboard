@@ -71,15 +71,18 @@ export class SyncService {
   /**
    * Normalize + upsert a raw payload for a user. Public so push-based providers (webhook handlers)
    * can reuse the exact same path as pull sync. The raw payload is not retained.
+   * `dates` are the distinct days written, so callers can recompute those trend windows (PLAN §8.4).
    */
   async ingest(
     userId: string,
     provider: string,
     raw: unknown,
-  ): Promise<{ dailyMetrics: number; activityEfforts: number }> {
+  ): Promise<{ dailyMetrics: number; activityEfforts: number; dates: string[] }> {
     const adapter = this.registry.getByProvider(provider);
     if (!adapter) throw new Error(`no adapter registered for provider "${provider}"`);
-    return this.normalizeAndUpsert(userId, adapter, raw);
+    const dates: string[] = [];
+    const counts = await this.normalizeAndUpsert(userId, adapter, raw, dates);
+    return { ...counts, dates };
   }
 
   private async syncOne(
@@ -134,13 +137,20 @@ export class SyncService {
     );
   }
 
-  private async normalizeAndUpsert(userId: string, adapter: AnyAdapter, raw: unknown) {
+  private async normalizeAndUpsert(
+    userId: string,
+    adapter: AnyAdapter,
+    raw: unknown,
+    /** Out-param: receives the distinct dates of the normalized rows. */
+    touchedDates?: string[],
+  ) {
     const version = adapter.derivationVersion ?? 1;
     // The adapter may not be trusted to stamp identity: userId and source are forced here, which is
     // also what makes per-provider disconnect deletion exact.
     const rows = (
       adapter.normalize(raw) as (NormalizedDailyMetric | NormalizedActivityEffort)[]
     ).map((r) => ({ ...r, userId, source: adapter.key }));
+    touchedDates?.push(...new Set(rows.map((r) => r.date)));
     if (adapter.role === 'daily_metrics_source') {
       return {
         dailyMetrics: await this.upsertDailyMetrics(rows as NormalizedDailyMetric[], version),

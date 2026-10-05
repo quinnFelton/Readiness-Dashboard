@@ -4,6 +4,7 @@ import type pg from 'pg';
 import { ConnectionConfigService } from '../../connections/config-service';
 import { ConnectionService } from '../../connections/connection-service';
 import { type TokenCipher, createTokenCipher } from '../../crypto/token-cipher';
+import { type Recompute, sharedRecompute } from '../../fatigue-fitness/recompute';
 import {
   type BackfillConfig,
   backfillConfigFromEnv,
@@ -27,7 +28,15 @@ export interface TerraWebhookDeps {
   saveGrant?: (userId: string, externalUserId: string) => Promise<unknown>;
   backfill?: (userId: string, terraUserId: string) => Promise<unknown>;
   backfillConfig?: BackfillConfig;
+  /** Trend/readiness recompute after stored daily metrics (PLAN §8.4). Default: process-wide hook. */
+  recompute?: Recompute;
 }
+
+/** `SyncService.ingest` reports the days it wrote; injected test seams may return anything. */
+const touchedDates = (out: unknown): string[] => {
+  const dates = (out as { dates?: unknown } | null | undefined)?.dates;
+  return Array.isArray(dates) ? dates.filter((d): d is string => typeof d === 'string') : [];
+};
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BODY = '6mb'; // API Gateway/Lambda sync payload ceiling
@@ -85,6 +94,8 @@ export function terraWebhookRouter(deps: TerraWebhookDeps = {}): Router {
         deps.backfillConfig ?? backfillConfigFromEnv(),
       );
     });
+
+  const recompute = deps.recompute ?? sharedRecompute();
 
   const r = Router();
 
@@ -203,7 +214,9 @@ export function terraWebhookRouter(deps: TerraWebhookDeps = {}): Router {
       }
       if (type === 'sleep' || type === 'daily' || type === 'body') {
         // daily/body flow through normalize too; the adapter decides what maps (currently sleep only).
-        await ingest(referenceId, payload);
+        const out = await ingest(referenceId, payload);
+        // PLAN §8.4: compute on sync. Never throws, so the event stays `processed` and Terra gets 200.
+        await recompute(referenceId, 'daily_metrics', touchedDates(out));
         return { outcome: 'processed', detail: type };
       }
       // user_reauth, s3_payload (ping mode), etc.: recorded, intentionally not acted on.
