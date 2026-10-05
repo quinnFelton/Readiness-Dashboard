@@ -11,7 +11,7 @@ import {
 import { migrate } from './migrate';
 import { runReplay } from './strava-replay';
 import { DEFAULT_TTL_DAYS, deleteOldWebhookEvents, resolveDays } from './webhook-ttl';
-import { createWebhooksApp } from './webhooks';
+import { createWebhooksApp, kickStravaReplay } from './webhooks';
 
 // No AWS, no DB, no network (CLAUDE.md rule 10): Secrets Manager is a fake client, pg is a stub.
 
@@ -170,5 +170,47 @@ describe('webhooks lambda app', () => {
   it('refuses to start with no/unknown providers', () => {
     expect(() => createWebhooksApp([])).toThrow(/WEBHOOK_PROVIDERS/);
     expect(() => createWebhooksApp(['nope'])).toThrow(/WEBHOOK_PROVIDERS/);
+  });
+});
+
+describe('strava replay kick (webhooks lambda)', () => {
+  const post = {
+    rawPath: '/api/v1/webhooks/strava',
+    requestContext: { http: { method: 'POST' } },
+  };
+  const env = { STRAVA_REPLAY_FUNCTION: 'rd-dev-strava-replay' } as NodeJS.ProcessEnv;
+
+  it('async-invokes the replay function after a 200 Strava POST', async () => {
+    const send = vi.fn(async (_cmd: unknown) => ({}));
+    expect(await kickStravaReplay(post, 200, env, { send })).toBe(true);
+    const cmd = send.mock.calls[0]![0] as { input: Record<string, unknown> };
+    expect(cmd.input.FunctionName).toBe('rd-dev-strava-replay');
+    expect(cmd.input.InvocationType).toBe('Event');
+    expect(JSON.parse(Buffer.from(cmd.input.Payload as Uint8Array).toString())).toEqual({
+      pendingAfterSec: 0,
+    });
+  });
+
+  it('does nothing for GET handshakes, non-200s, other paths, or when unconfigured', async () => {
+    const send = vi.fn(async () => ({}));
+    const get = { ...post, requestContext: { http: { method: 'GET' } } };
+    const terra = { ...post, rawPath: '/api/v1/webhooks/terra' };
+    expect(await kickStravaReplay(get, 200, env, { send })).toBe(false);
+    expect(await kickStravaReplay(post, 403, env, { send })).toBe(false);
+    expect(await kickStravaReplay(terra, 200, env, { send })).toBe(false);
+    expect(await kickStravaReplay(post, 200, {} as NodeJS.ProcessEnv, { send })).toBe(false);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('swallows invoke failures (the fallback schedule covers them)', async () => {
+    const send = vi.fn().mockRejectedValue(new Error('AccessDenied'));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(await kickStravaReplay(post, 200, env, { send })).toBe(false);
+  });
+
+  it('replay honours an event-supplied pendingAfterSec of 0', async () => {
+    const query = vi.fn(async (_sql: string, _params: unknown[]) => ({ rows: [] }));
+    await runReplay({ pool: { query } as never, ingest: {} as never }, {}, { pendingAfterSec: 0 });
+    expect(query.mock.calls[0]![1]).toEqual([25, 0]);
   });
 });
