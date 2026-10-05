@@ -62,6 +62,8 @@ export class DataStack extends Stack {
         ? ec2.NatProvider.instanceV2({
             instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.NANO),
             defaultAllowedTraffic: ec2.NatTrafficDirection.NONE,
+            // T4g defaults to "unlimited" credits, which can bill extra under sustained load.
+            creditSpecification: ec2.CpuCredits.STANDARD,
           })
         : undefined;
     const natProvider = natInstances ?? ec2.NatProvider.gateway();

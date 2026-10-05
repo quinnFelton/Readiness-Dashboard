@@ -39,7 +39,11 @@ describe('data stack', () => {
   it('uses a NAT instance by default, not a NAT gateway, and no interface endpoints', () => {
     data.resourceCountIs('AWS::EC2::NatGateway', 0);
     data.resourceCountIs('AWS::EC2::VPCEndpoint', 0);
-    data.hasResourceProperties('AWS::EC2::Instance', { InstanceType: 't4g.nano' });
+    data.hasResourceProperties('AWS::EC2::Instance', {
+      InstanceType: 't4g.nano',
+      SourceDestCheck: false,
+      CreditSpecification: { CPUCredits: 'standard' }, // no surprise "unlimited" burst charges
+    });
     // The NAT instance has a public IP: its SG admits only Lambda HTTP(S).
     const ingress = data.findResources('AWS::EC2::SecurityGroupIngress');
     const nat = Object.values(ingress).filter((r) => [80, 443].includes(r.Properties.FromPort));
