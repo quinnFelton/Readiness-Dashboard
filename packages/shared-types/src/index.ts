@@ -3,3 +3,4 @@
 export * from './user';
 export * from './connection';
 export * from './metrics';
+export * from './dashboard';
