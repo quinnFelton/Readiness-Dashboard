@@ -46,7 +46,8 @@ DO $$
 DECLARE r text;
 BEGIN
   FOREACH r IN ARRAY ARRAY['rd_api', 'rd_hook_terra', 'rd_hook_strava', 'rd_hook_oura',
-                           'rd_oura_sync', 'rd_strava_replay', 'rd_webhook_ttl', 'rd_history_rebuild']
+                           'rd_oura_sync', 'rd_strava_replay', 'rd_webhook_ttl', 'rd_history_rebuild',
+                           'rd_first_master']
   LOOP
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = r) THEN
       EXECUTE format('CREATE ROLE %I LOGIN', r);
@@ -92,6 +93,11 @@ GRANT SELECT, INSERT, UPDATE ON connection_configs TO rd_hook_terra;
 GRANT SELECT, INSERT, UPDATE ON daily_metrics TO rd_hook_terra;
 GRANT SELECT, INSERT, UPDATE ON webhook_events TO rd_hook_terra;
 
+-- First master account (infra/cdk `enableFirstMaster`, DEPLOY.md): create the very first master, or
+-- promote an existing user, and only ever through the guarded function. Nothing else.
+GRANT SELECT, INSERT ON users TO rd_first_master;
+GRANT UPDATE (role) ON users TO rd_first_master;
+
 -- webhook_events TTL sweep: delete by age, nothing else (it never reads a payload).
 GRANT SELECT (received_at) ON webhook_events TO rd_webhook_ttl;
 GRANT DELETE ON webhook_events TO rd_webhook_ttl;
@@ -101,7 +107,8 @@ DO $$
 DECLARE r text;
 BEGIN
   FOREACH r IN ARRAY ARRAY['rd_api', 'rd_hook_terra', 'rd_hook_strava', 'rd_hook_oura',
-                           'rd_oura_sync', 'rd_strava_replay', 'rd_webhook_ttl', 'rd_history_rebuild']
+                           'rd_oura_sync', 'rd_strava_replay', 'rd_webhook_ttl', 'rd_history_rebuild',
+                           'rd_first_master']
   LOOP
     IF EXISTS (SELECT FROM pg_roles WHERE rolname = r) THEN
       EXECUTE format('REVOKE ALL ON ALL TABLES IN SCHEMA public FROM %I', r);

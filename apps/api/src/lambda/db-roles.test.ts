@@ -112,6 +112,7 @@ const EXPECTED: Record<string, Record<string, Priv[]>> = {
   }),
   rd_history_rebuild: merge(RECOMPUTE),
   rd_webhook_ttl: { webhook_events: ['DELETE'] },
+  rd_first_master: { users: ['INSERT', 'SELECT'] },
 };
 const COLUMN_GRANTS: Record<string, { table: string; column: string }[]> = {
   rd_hook_terra: [{ table: 'users', column: 'id' }],
