@@ -87,7 +87,7 @@ function ChartTooltip({
 }
 
 export function TimeSeriesChart({
-  series,
+  series: allSeries,
   bands = [],
   markers = [],
   height = 320,
@@ -95,7 +95,11 @@ export function TimeSeriesChart({
   emptyMessage = 'No data in this range yet.',
   showLegend = true,
 }: TimeSeriesChartProps) {
-  const hasData = series.some((s) => s.points.length > 0);
+  // Only series that have points are plotted AND listed in the legend (phase 9 dashboard item: the
+  // hero chart's legend used to name HRV / resting HR even when nothing was drawn for them, and an
+  // empty series on its own axis drew an empty axis).
+  const series = allSeries.filter((s) => s.points.length > 0);
+  const hasData = series.length > 0;
   if (!hasData) {
     return (
       <p role="status" className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
