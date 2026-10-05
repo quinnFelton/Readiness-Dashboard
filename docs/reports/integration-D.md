@@ -127,3 +127,9 @@ I read all of `docs/reports/*-test-report.md`. The stage D commit messages have 
 - `0620d12` feat(web): wire admin drill-down to AthleteDashboard; adapt dashboard/admin clients to 5b responses
 - `33cf51c` test(web,api): @/ alias in vitest; ConnectionsPanel, callback page and OAuth round-trip tests
 - this report
+
+## Owner follow-ups (2026-10-04)
+- **Open item 1 resolved:** `GET /trends/:userId` now also returns `series` (`MetricSeries`): EF peak-20 and EF overall from the `is_default` deriver only, and HRV and resting HR resolved by the user's source precedence. These are the same sources the classifier reads. The series are sparse: nothing is interpolated, and several rides on one day are all kept. The dashboard charts now have data. Tests: `apps/api/src/trends/series.test.ts`.
+- **Open item 2 resolved:** `GET /connections/providers` lists the adapter registry, activity source first, with `displayName` and `flow`. These come from new optional adapter fields, set on the Oura, Strava and Terra adapters. `providers` is now reserved. The web 404 fallback remains only as a safety net. Tests: `apps/api/src/connections/providers.test.ts`.
+- **Flaky test fixed:** `comparison.test.ts` promotes a test classifier to default in the shared DB, which intermittently failed `trends/routes.test.ts` in full parallel runs. Files that depend on the default flags now share an advisory lock (`apps/api/src/test-utils/defaults-mutex.ts`).
+- **Checks:** typecheck and lint are clean, and 649 tests pass on three consecutive full runs.
