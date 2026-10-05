@@ -14,19 +14,22 @@
     "db:migrate:create": "node-pg-migrate create --migrations-dir db/migrations --migration-file-language sql"
   },
   "dependencies": {
+    "@aws-sdk/client-kms": "^3.1146.0",
+    "@aws-sdk/client-secrets-manager": "^3.1146.0",
     "@rd/provider-adapters": "workspace:*",
     "@rd/scoring-engine": "workspace:*",
     "@rd/shared-types": "workspace:*",
     "express": "^5.2.1",
+    "node-pg-migrate": "^9.0.0",
     "pg": "^8.23.1",
     "serverless-http": "^4.0.0"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.164",
     "@types/express": "^5.0.6",
     "@types/pg": "^8.15.5",
     "@types/supertest": "^7.2.1",
     "dotenv": "^18.0.5",
-    "node-pg-migrate": "^9.0.0",
     "supertest": "^7.3.1",
     "tsx": "^4.23.15"
   }

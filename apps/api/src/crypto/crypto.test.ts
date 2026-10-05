@@ -35,7 +35,7 @@ describe('LocalAesGcmCipher', () => {
 });
 
 describe('createTokenCipher / KmsTokenCipher', () => {
-  it('picks local in dev and the KMS stub in prod with KMS_KEY_ID', async () => {
+  it('picks local in dev and the KMS envelope cipher in prod with KMS_KEY_ID', async () => {
     expect(createTokenCipher({ TOKEN_ENCRYPTION_KEY: key } as NodeJS.ProcessEnv)).toBeInstanceOf(
       LocalAesGcmCipher,
     );
@@ -44,7 +44,8 @@ describe('createTokenCipher / KmsTokenCipher', () => {
       KMS_KEY_ID: 'k',
     } as NodeJS.ProcessEnv);
     expect(prod).toBeInstanceOf(KmsTokenCipher);
-    await expect(prod.encrypt('x')).rejects.toThrow(/not implemented/);
+    // No KMS_ENCRYPTED_DATA_KEY configured: fails clearly, before any AWS call.
+    await expect(prod.encrypt('x')).rejects.toThrow(/KMS_ENCRYPTED_DATA_KEY/);
   });
 });
 
