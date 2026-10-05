@@ -35,7 +35,7 @@ Result: **FAILED** (2 failing tests, both added by the tester in `apps/web/src/a
    - Expected: `{xcode, mystate}` is rejected without calling the API.
    - Actual: `qs.includes('code=')` is a substring match. A key like `xcode` or `mystate` passes the check and the API is called.
    - Impact is low, because the API still verifies the state. The fix is to check the keys on the query object.
-   - I did not confirm which of the two failing tests is which from the run output. The login-page test is the one shown failing, and the xcode test is assumed to be the other.
+   - Confirmed by the run output: the failing tests are the xcode/mystate test and the login-page test.
 
 ## Risks not tested
 
