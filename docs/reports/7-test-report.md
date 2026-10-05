@@ -107,3 +107,10 @@ Hydration-sensitive clicks (Connect, Disconnect) retry via `expect(...).toPass()
   Expected `daily_metrics` count for user b = 1, actual 0 (the line number moves between runs, so it is order-dependent). Likely cause, inferred from reading the test and not confirmed by querying the DB (psql was denied here): the e2e seed leaves `connection_configs` / connections for `user01`/`user02` in the shared `DATABASE_URL`. `syncAll()` iterates all users with config, so it consumes the test's two queued Oura responses on e2e users first and leaves `b` empty. The e2e suite therefore makes the API unit suite fail on a shared DB. This is a test-isolation defect in the e2e seed or in the unit test (which should scope `syncAll`). It was not fixed here, since I may only edit tests and the report, and the unit test is outside phase 7. Suggested fix: e2e global setup should use a separate database, or the unit test should clean the config table first.
   Since the e2e seed persists after the run, CI needs the e2e job and unit job on separate Postgres instances (they already are separate jobs).
 - Risks untested: Terra redirect-only connection path (observation above); real provider field names (all stubbed); CI job not executed locally.
+
+## Re-verification after fixes (tester run 2)
+
+- `pnpm db:migrate` clean; `pnpm typecheck`, `pnpm lint` clean; `pnpm test` 649/649 (the earlier `syncAll` isolation failure is gone); `pnpm test:e2e` 41/41 with no `test.fail`/`skip` left.
+- All eight PLAN §10 flows covered, including chart data points (flow 5), built-app `/admin` redirect (flow 7), post-disconnect dashboard (flow 8).
+- Untested risks: Terra redirect-only connection path, real provider field names (stubbed), CI `e2e` job not executed locally, `onSyncComplete` still not wired into ingest (only disconnect recompute is covered).
+- Note: the branch contains product-code fixes (api connection-service/users routes, login page) made by the phase author outside the stated ownership; the tests exercise them.
