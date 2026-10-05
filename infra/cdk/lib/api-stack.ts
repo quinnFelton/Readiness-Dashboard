@@ -195,7 +195,7 @@ export class ApiStack extends Stack {
     // Throttling is ON for every route (PLAN §12 "rate-limit the public API via API Gateway").
     // Access logs are JSON, carry no query strings (Strava's verify token is a query parameter) and
     // feed the webhook-auth-failure alarm.
-    new apigwv2.HttpStage(this, 'DefaultStage', {
+    const stage = new apigwv2.HttpStage(this, 'DefaultStage', {
       httpApi: this.httpApi,
       stageName: '$default',
       autoDeploy: true,
@@ -215,6 +215,15 @@ export class ApiStack extends Stack {
         ),
       },
     });
+
+    // Per-route throttle (security review M4): Strava's POST has no signature, so it gets a much
+    // tighter limit than the stage default. The route key must match the route created below.
+    (stage.node.defaultChild as apigwv2.CfnStage).routeSettings = {
+      'POST /api/v1/webhooks/strava': {
+        ThrottlingRateLimit: config.stravaWebhookThrottle.rateLimit,
+        ThrottlingBurstLimit: config.stravaWebhookThrottle.burstLimit,
+      },
+    };
 
     const hook = (provider: string, fn: lambda.IFunction) =>
       this.httpApi.addRoutes({

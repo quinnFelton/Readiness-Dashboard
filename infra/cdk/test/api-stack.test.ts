@@ -204,6 +204,18 @@ describe('HTTP API', () => {
     });
   });
 
+  it('throttles the unauthenticated Strava POST harder than the stage default (M4)', () => {
+    api.hasResourceProperties('AWS::ApiGatewayV2::Stage', {
+      RouteSettings: {
+        'POST /api/v1/webhooks/strava': { ThrottlingRateLimit: 5, ThrottlingBurstLimit: 10 },
+      },
+    });
+    const routes = Object.values(api.findResources('AWS::ApiGatewayV2::Route')).map(
+      (r) => r.Properties.RouteKey,
+    );
+    expect(routes).toContain('POST /api/v1/webhooks/strava'); // the key must exist or deploy fails
+  });
+
   it('access logs never include query strings (Strava verify token) or client IPs', () => {
     const stage = Object.values(api.findResources('AWS::ApiGatewayV2::Stage'))[0]!;
     const fmt = JSON.stringify(stage.Properties.AccessLogSettings.Format);

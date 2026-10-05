@@ -51,6 +51,7 @@ function fakeStrava() {
   const activities = new Map<number, unknown>();
   const streams = new Map<number, unknown>();
   let usageHeader: string | undefined;
+  let athleteStatus = 200; // GET /athlete; 401 = the athlete deauthorized the app
   const f = async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const auth = (init?.headers as Record<string, string> | undefined)?.authorization;
@@ -68,6 +69,7 @@ function fakeStrava() {
         expires_in: 21600,
       });
     }
+    if (url.pathname === '/api/v3/athlete') return json({ id: 4242 }, athleteStatus);
     const m = /^\/api\/v3\/activities\/(\d+)(\/streams)?$/.exec(url.pathname);
     const headers: Record<string, string> = usageHeader
       ? { 'x-readratelimit-limit': '100,1000', 'x-readratelimit-usage': usageHeader }
@@ -83,6 +85,7 @@ function fakeStrava() {
     activities,
     streams,
     setUsage: (u: string | undefined) => (usageHeader = u),
+    setAthleteStatus: (s: number) => (athleteStatus = s),
     apiCalls: () => calls.filter((c) => c.path.startsWith('/api/v3')),
   };
 }
@@ -173,6 +176,7 @@ describe('strava webhook', () => {
     fake.activities.clear();
     fake.streams.clear();
     fake.setUsage(undefined);
+    fake.setAthleteStatus(200);
     now = new Date();
     limiter.update(
       new Headers({ 'x-readratelimit-limit': '100,1000', 'x-readratelimit-usage': '0,0' }),
@@ -268,21 +272,70 @@ describe('strava webhook', () => {
     it('retries / duplicate deliveries produce exactly one row', async () => {
       fake.activities.set(9001, ride(9001));
       fake.streams.set(9001, steady(1800));
-      await Promise.all([post(event('create', 9001)), post(event('create', 9001))]);
-      await post(event('create', 9001));
+      // Dedupe off here, to prove the upsert itself is idempotent (the dedupe has its own test).
+      const raw = express();
+      raw.use(
+        stravaWebhookRouter({ ingest, verifyToken: VERIFY, pool: pool(), dedupeWindowSec: 0 }),
+      );
+      const send = () => request(raw).post('/').send(event('create', 9001));
+      await Promise.all([send(), send()]);
+      await send();
       expect(await effortRows()).toHaveLength(1);
       expect(await eventRows()).toHaveLength(3); // each delivery is recorded, one metric row
     });
 
-    it('delete: removes the activity_efforts row without calling Strava', async () => {
+    it('delete: confirmed with Strava first; removes the row only because Strava says it is gone', async () => {
       fake.activities.set(9001, ride(9001));
       fake.streams.set(9001, steady(1800));
       await post(event('create', 9001));
+      fake.activities.delete(9001); // really deleted on Strava
       fake.calls.length = 0;
       const r = await post(event('delete', 9001));
       expect(r.status).toBe(200);
       expect(await effortRows()).toHaveLength(0);
-      expect(fake.calls).toHaveLength(0);
+      expect(fake.apiCalls().map((c) => c.path)).toEqual(['/api/v3/activities/9001']);
+    });
+
+    it('a forged delete for an activity that still exists on Strava removes nothing (H2)', async () => {
+      fake.activities.set(9001, ride(9001));
+      fake.streams.set(9001, steady(1800));
+      await post(event('create', 9001));
+      expect(await effortRows()).toHaveLength(1);
+      await post(event('delete', 9001)); // Strava still has it
+      expect(await effortRows()).toHaveLength(1);
+    });
+
+    it('collapses repeats of one (owner, object, aspect) inside the window, even when concurrent', async () => {
+      fake.activities.set(9001, ride(9001));
+      fake.streams.set(9001, steady(1800));
+      await Promise.all([post(event('update', 9001)), post(event('update', 9001))]);
+      await post(event('update', 9001));
+      expect(await eventRows()).toHaveLength(1);
+      expect(fake.apiCalls().filter((c) => c.path === '/api/v3/activities/9001')).toHaveLength(1);
+      await post(event('delete', 9001)); // a different aspect is not a repeat
+      expect(await eventRows()).toHaveLength(2);
+    });
+
+    it('flags a still-pending event so only then does the Lambda kick the replay (M4)', async () => {
+      const slow = express();
+      const slowIngest = {
+        findUserByAthlete: ingest.findUserByAthlete.bind(ingest),
+        ingestActivity: () => new Promise<never>(() => undefined), // never finishes in the budget
+      } as unknown as StravaIngestService;
+      slow.use(
+        stravaWebhookRouter({
+          ingest: slowIngest,
+          verifyToken: VERIFY,
+          pool: pool(),
+          responseBudgetMs: 20,
+        }),
+      );
+      const r = await request(slow).post('/').send(event('create', 9100));
+      expect(r.status).toBe(200);
+      expect(r.headers['x-rd-replay']).toBe('1');
+      expect((await eventRows())[0]).toMatchObject({ status: 'pending' });
+      const fast = await post(event('create', 9101));
+      expect(fast.headers['x-rd-replay']).toBeUndefined();
     });
 
     it('delete only touches the owner’s own activity', async () => {
@@ -342,15 +395,54 @@ describe('strava webhook', () => {
       expect(await effortRows()).toHaveLength(0);
     });
 
-    it('events for unknown athletes are recorded but cause no Strava calls', async () => {
+    it('events for unknown athletes are dropped: no Strava calls and no row stored (M4)', async () => {
       const r = await post(event('create', 9001, { owner_id: 999999 }));
       expect(r.status).toBe(200);
+      expect(r.headers['x-rd-replay']).toBeUndefined();
       expect(fake.calls).toHaveLength(0);
-      const { rows } = await pool().query(
-        `SELECT user_id FROM webhook_events WHERE payload_jsonb->>'owner_id' = '999999'`,
+      const { rowCount } = await pool().query(
+        `SELECT 1 FROM webhook_events WHERE payload_jsonb->>'owner_id' = '999999'`,
       );
-      expect(rows[0].user_id).toBeNull();
-      await pool().query(`DELETE FROM webhook_events WHERE payload_jsonb->>'owner_id' = '999999'`);
+      expect(rowCount).toBe(0);
+    });
+
+    it('production fails closed without a pinned subscription id; a pinned one still works (H2)', async () => {
+      const prod = express();
+      prod.use(
+        '/w',
+        stravaWebhookRouter({
+          ingest,
+          verifyToken: VERIFY,
+          pool: pool(),
+          requireSubscriptionPin: true,
+        }),
+      );
+      const open = await request(prod).post('/w').send(event('create', 1));
+      expect(open.status).toBe(503);
+      expect(fake.calls).toHaveLength(0);
+      expect(await eventRows()).toHaveLength(0);
+
+      const pinnedProd = express();
+      pinnedProd.use(
+        '/w',
+        stravaWebhookRouter({
+          ingest,
+          verifyToken: VERIFY,
+          subscriptionId: '777',
+          requireSubscriptionPin: true,
+          pool: pool(),
+        }),
+      );
+      expect((await request(pinnedProd).post('/w').send(event('create', 1))).status).toBe(200);
+    });
+
+    it('receipts store ids only: a renamed-activity title in `updates` is not kept', async () => {
+      fake.activities.set(9001, ride(9001));
+      fake.streams.set(9001, steady(1800));
+      await post(event('update', 9001, { updates: { title: 'Tempo with my doctor' } }));
+      const [row] = await eventRows();
+      expect(JSON.stringify(row.payload_jsonb)).not.toContain('doctor');
+      expect(row.payload_jsonb).not.toHaveProperty('updates');
     });
 
     it('rejects malformed bodies and mismatched subscription ids', async () => {
@@ -362,7 +454,28 @@ describe('strava webhook', () => {
       expect(fake.calls).toHaveLength(0);
     });
 
-    it('athlete deauthorization deactivates the connection and clears tokens', async () => {
+    const deauthEvent = {
+      object_type: 'athlete',
+      object_id: ATHLETE,
+      aspect_type: 'update',
+      owner_id: ATHLETE,
+      subscription_id: 777,
+      updates: { authorized: 'false' },
+    };
+
+    it('a forged deauthorization event does not disconnect: Strava still accepts the token (H2)', async () => {
+      await post(deauthEvent);
+      const { rows } = await pool().query(
+        `SELECT is_active, access_token_enc IS NOT NULL AS has_token FROM provider_connections WHERE user_id=$1`,
+        [userId],
+      );
+      expect(rows[0]).toEqual({ is_active: true, has_token: true });
+      expect(fake.apiCalls().map((c) => c.path)).toEqual(['/api/v3/athlete']);
+      expect((await eventRows())[0]).toMatchObject({ status: 'processed' });
+    });
+
+    it('athlete deauthorization deactivates the connection and clears tokens once Strava rejects the token', async () => {
+      fake.setAthleteStatus(401);
       await post({
         object_type: 'athlete',
         object_id: ATHLETE,
@@ -434,7 +547,8 @@ describe('strava webhook', () => {
       a.use(stravaWebhookRouter({ ingest: svc, verifyToken: VERIFY, pool: pool() }));
       const r = await request(a).post('/').send(event('create', 9001));
       expect(r.status).toBe(200); // still ack: Strava must not hammer us
-      expect((await eventRows())[0].status).toBe('failed');
+      // A revoked grant can never succeed until the user reconnects: terminal at once (phase 9).
+      expect((await eventRows())[0].status).toBe('abandoned');
       const { rows } = await pool().query(
         'SELECT is_active FROM provider_connections WHERE user_id=$1',
         [userId],
@@ -456,7 +570,7 @@ describe('strava webhook', () => {
       await pool().query('DELETE FROM activity_efforts WHERE user_id=$1', [userId]);
 
       fake.calls.length = 0;
-      await post(event('create', 9001));
+      await post(event('update', 9001)); // (not a repeat of the create above, so not deduped)
       expect(fake.calls).toHaveLength(0); // limiter refused locally — never risked a 429
       expect((await eventRows()).at(-1)!.status).toBe('failed');
       expect(await effortRows()).toHaveLength(0);

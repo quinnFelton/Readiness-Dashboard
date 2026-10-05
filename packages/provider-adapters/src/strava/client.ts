@@ -132,6 +132,14 @@ export class StravaClient {
     if (!res.ok) throw new StravaHttpError(res.status);
   }
 
+  /**
+   * GET /athlete (https://developers.strava.com/docs/reference/): cheapest authenticated call, used
+   * only to confirm that a token still works. 401 -> StravaAuthError (the grant is gone).
+   */
+  async getAthlete(accessToken: string): Promise<{ id?: number } | null> {
+    return this.get<{ id?: number }>(accessToken, '/athlete');
+  }
+
   getActivity(accessToken: string, id: string | number): Promise<StravaActivitySummary | null> {
     return this.get<StravaActivitySummary>(
       accessToken,
