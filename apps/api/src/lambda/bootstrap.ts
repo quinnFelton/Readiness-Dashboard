@@ -46,11 +46,12 @@ export function databaseUrlFromSecret(s: DbSecret): string {
   if (!s.username || !s.password || !s.host) throw new Error('DB secret is missing fields');
   const port = s.port ?? 5432;
   const db = s.dbname ?? 'postgres';
-  // sslmode=no-verify: encrypted in transit inside the VPC without shipping the RDS CA bundle. Tighten
-  // to a pinned CA once pool.ts accepts an `ssl` option (see infra/cdk/README.md "Needs").
+  // No `sslmode` here on purpose (security review M3): node-postgres lets a connection-string
+  // sslmode override the pool's `ssl` option, and `no-verify` used to switch certificate checking
+  // off. TLS with verification comes from users/pool.ts (PG_SSL_CA_FILE = the RDS CA bundle).
   return (
     `postgres://${encodeURIComponent(s.username)}:${encodeURIComponent(s.password)}` +
-    `@${s.host}:${port}/${encodeURIComponent(db)}?sslmode=no-verify`
+    `@${s.host}:${port}/${encodeURIComponent(db)}`
   );
 }
 
