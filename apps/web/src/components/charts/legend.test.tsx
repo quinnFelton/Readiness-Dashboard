@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
+import type * as Recharts from 'recharts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // Recharts' ResponsiveContainer needs layout; the legend is plain HTML below the plot, which is
 // what is under test.
 vi.mock('recharts', async (orig) => {
-  const actual = await orig<typeof import('recharts')>();
+  const actual = await orig<typeof Recharts>();
   return {
     ...actual,
     ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
