@@ -46,6 +46,20 @@ jobs:
   e2e:
     name: playwright
     runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rd
+          POSTGRES_PASSWORD: rd
+          POSTGRES_DB: readiness
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U rd -d readiness"
+          --health-interval 2s --health-timeout 5s --health-retries 15
+    env:
+      DATABASE_URL: postgres://rd:rd@localhost:5432/readiness
+      CI: 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -55,10 +69,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
+      # Playwright (playwright.config.ts) starts the API through the provider-stubbing launcher and
+      # the web app (`next build` + `next start`); its globalSetup migrates and seeds DATABASE_URL.
+      # No step here reaches Oura, Strava or Terra.
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/artifacts/
           retention-days: 7

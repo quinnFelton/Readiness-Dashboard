@@ -12,8 +12,25 @@ import { usersRouter } from './users/routes';
 import { stravaWebhookRouter } from './webhooks/strava/routes';
 import { terraWebhookRouter } from './webhooks/terra/router';
 
-// The same Express app runs locally (server.ts) and in Lambda via serverless-http (lambda.ts).
-export function createApp(): Express {
+export const WEBHOOK_PROVIDERS = ['terra', 'strava', 'oura'] as const;
+export type WebhookProvider = (typeof WEBHOOK_PROVIDERS)[number];
+
+export interface CreateAppOptions {
+  /**
+   * Which route groups to mount (PLAN §11: the REST API and each provider's webhook receiver run as
+   * separate Lambdas with separate roles). `all` (default) is the local server / single-Lambda shape.
+   */
+  mount?: 'all' | 'api' | 'webhooks';
+  /** Webhook routers to mount when webhooks are mounted. Default: all of WEBHOOK_PROVIDERS. */
+  webhookProviders?: readonly WebhookProvider[];
+}
+
+// The same Express app runs locally (server.ts) and in Lambda via serverless-http (lambda.ts, and the
+// split entrypoints in lambda/api.ts and lambda/webhooks.ts).
+export function createApp(opts: CreateAppOptions = {}): Express {
+  const mount = opts.mount ?? 'all';
+  const providers = new Set(opts.webhookProviders ?? WEBHOOK_PROVIDERS);
+
   // Real provider adapters from env config; idempotent and a no-op for unconfigured providers.
   registerDefaultAdapters();
 
@@ -24,11 +41,17 @@ export function createApp(): Express {
   // an HMAC over the exact raw bytes (CLAUDE.md rule 7), so each router brings its own body parser
   // (express.raw for Terra/Oura, express.json for Strava, which has no payload signature). Auth here
   // is the signature / verify token, not a user session.
-  const webhooks = express.Router();
-  webhooks.use('/terra', terraWebhookRouter());
-  webhooks.use('/strava', stravaWebhookRouter({ ingest: lazyStravaIngest() }));
-  webhooks.use('/oura', createOuraWebhookRouter()); // GET verification challenge + POST events
-  app.use('/api/v1/webhooks', webhooks);
+  if (mount !== 'api') {
+    const webhooks = express.Router();
+    if (providers.has('terra')) webhooks.use('/terra', terraWebhookRouter());
+    if (providers.has('strava')) {
+      webhooks.use('/strava', stravaWebhookRouter({ ingest: lazyStravaIngest() }));
+    }
+    // GET verification challenge + POST events
+    if (providers.has('oura')) webhooks.use('/oura', createOuraWebhookRouter());
+    app.use('/api/v1/webhooks', webhooks);
+  }
+  if (mount === 'webhooks') return app;
 
   app.use(express.json());
 

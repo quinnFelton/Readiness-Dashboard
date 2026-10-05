@@ -124,7 +124,9 @@ export function connectionsRouter(deps: ConnectionsDeps = {}): Router {
 
   r.delete('/:provider', async (req, res) => {
     const provider = providerParam(req.params.provider);
-    await connections().disconnect(req.user!.id, provider);
+    // History is kept unless the caller asks for the erase explicitly (PLAN §10 flow 8, §12).
+    const deleteData = req.query.deleteData === 'true';
+    await connections().disconnect(req.user!.id, provider, { deleteData });
     res.status(204).end();
   });
 

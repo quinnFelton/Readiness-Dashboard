@@ -1,0 +1,150 @@
+name: Deploy
+
+# Manual only. This workflow never runs on push or pull_request.
+#
+# Safety model (see infra/cdk/DEPLOY.md):
+#  * workflow_dispatch: a human picks the stage.
+#  * `environment: <stage>`: configure "Required reviewers" on the `prod` (and ideally `dev`)
+#    GitHub environment, so the job waits for an approval before it can even request AWS credentials.
+#  * GitHub OIDC: the job exchanges its short-lived token for a role session. There are no AWS access
+#    keys in repository secrets. The role's trust policy pins this repo + this environment
+#    (infra/cdk/lib/github-oidc-stack.ts), and the role can only assume the CDK bootstrap roles.
+#  * The database is not reachable from GitHub runners, so migrations run by invoking the
+#    in-VPC `rd-<stage>-migrate` Lambda after the stacks are deployed.
+#
+# Per-environment configuration (Settings -> Environments -> <stage> -> Variables; none are secrets):
+#   AWS_DEPLOY_ROLE_ARN  output of the rd-github-oidc stack (DeployDev / DeployProd role)
+#   AWS_REGION           e.g. us-west-2
+#   ALARM_EMAIL          optional; alarm recipient
+#   WEB_REPOSITORY       optional; https://github.com/<owner>/<repo> for Amplify
+#   WEB_BRANCH           optional; Amplify branch (default: main for prod, dev for dev)
+#   WEB_DOMAIN           optional; custom domain you attached in Amplify
+#   NAT_MODE             optional; instance (default) or gateway
+
+on:
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: Stage to deploy
+        type: choice
+        options: [dev, prod]
+        required: true
+      stacks:
+        description: Space-separated stack names (blank = data web api observability for the stage)
+        type: string
+        required: false
+        default: ''
+      run_migrations:
+        description: Invoke the migrate Lambda after deploying
+        type: boolean
+        default: true
+      sync_oura_subscriptions:
+        description: Invoke oura-subscriptions after deploying (creates/renews Oura webhooks)
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write # GitHub OIDC -> AWS
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.stage }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: cdk deploy (${{ inputs.stage }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: ${{ inputs.stage }}
+    env:
+      STAGE: ${{ inputs.stage }}
+      STACKS_INPUT: ${{ inputs.stacks }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      CDK_DEFAULT_REGION: ${{ vars.AWS_REGION }}
+      ALARM_EMAIL: ${{ vars.ALARM_EMAIL }}
+      WEB_REPOSITORY: ${{ vars.WEB_REPOSITORY }}
+      WEB_BRANCH: ${{ vars.WEB_BRANCH }}
+      WEB_DOMAIN: ${{ vars.WEB_DOMAIN }}
+      NAT_MODE: ${{ vars.NAT_MODE }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Never deploy something the assertion tests reject.
+      - name: Typecheck and test the CDK app
+        run: |
+          pnpm --filter @rd/infra-cdk typecheck
+          pnpm --filter @rd/infra-cdk test
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-deploy-${{ inputs.stage }}-${{ github.run_id }}
+
+      - name: Resolve stacks and CDK context
+        run: |
+          set -euo pipefail
+          # Free-text input: allow only stack-name characters before it reaches a shell.
+          if ! [[ "${STACKS_INPUT}" =~ ^[A-Za-z0-9\ -]*$ ]]; then
+            echo "stacks input may contain only letters, digits, spaces and dashes" >&2
+            exit 1
+          fi
+          stacks="${STACKS_INPUT:-rd-${STAGE}-data rd-${STAGE}-web rd-${STAGE}-api rd-${STAGE}-observability}"
+          ctx=(-c "stage=${STAGE}")
+          [ -n "${ALARM_EMAIL}" ]    && ctx+=(-c "alarmEmail=${ALARM_EMAIL}")
+          [ -n "${WEB_REPOSITORY}" ] && ctx+=(-c "webRepository=${WEB_REPOSITORY}")
+          [ -n "${WEB_BRANCH}" ]     && ctx+=(-c "webBranch=${WEB_BRANCH}")
+          [ -n "${WEB_DOMAIN}" ]     && ctx+=(-c "webDomain=${WEB_DOMAIN}")
+          [ -n "${NAT_MODE}" ]       && ctx+=(-c "natMode=${NAT_MODE}")
+          { echo "STACKS=${stacks}"; echo "CTX=${ctx[*]}"; } >> "$GITHUB_ENV"
+
+      - name: cdk diff
+        run: pnpm --filter @rd/infra-cdk exec cdk diff ${STACKS} ${CTX}
+        continue-on-error: true # a first deploy has nothing to diff against
+
+      - name: cdk deploy
+        # --require-approval never: the human gate is the GitHub environment approval above.
+        run: pnpm --filter @rd/infra-cdk exec cdk deploy ${STACKS} ${CTX} --require-approval never --concurrency 1
+
+      - name: Apply database migrations (in-VPC Lambda)
+        if: ${{ inputs.run_migrations }}
+        run: |
+          set -euo pipefail
+          err=$(aws lambda invoke \
+            --function-name "rd-${STAGE}-migrate" \
+            --cli-read-timeout 900 --cli-binary-format raw-in-base64-out \
+            --payload '{}' --query 'FunctionError' --output text migrate-out.json)
+          cat migrate-out.json; echo
+          [ "${err}" = "None" ] || { echo "migrate Lambda failed (${err})" >&2; exit 1; }
+
+      - name: Create/renew Oura webhook subscriptions
+        if: ${{ inputs.sync_oura_subscriptions }}
+        run: |
+          set -euo pipefail
+          err=$(aws lambda invoke \
+            --function-name "rd-${STAGE}-oura-subscriptions" \
+            --cli-read-timeout 300 --cli-binary-format raw-in-base64-out \
+            --payload '{}' --query 'FunctionError' --output text subs-out.json)
+          cat subs-out.json; echo
+          [ "${err}" = "None" ] || { echo "oura-subscriptions failed (${err})" >&2; exit 1; }
+
+      - name: Summarise URLs to register with providers
+        run: |
+          set -euo pipefail
+          out() { aws cloudformation describe-stacks --stack-name "rd-${STAGE}-api" \
+                    --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text; }
+          {
+            echo "### Deployed rd-${STAGE}"
+            echo "- Terra webhook: \`$(out TerraWebhookUrl)\`"
+            echo "- Strava webhook callback: \`$(out StravaWebhookUrl)\`"
+            echo "- Oura webhook callback (registered by oura-subscriptions): \`$(out OuraWebhookUrl)\`"
+            echo
+            echo "See infra/cdk/DEPLOY.md for the one-time provider registration steps."
+          } >> "$GITHUB_STEP_SUMMARY"

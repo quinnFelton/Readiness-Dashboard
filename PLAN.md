@@ -169,7 +169,7 @@ interface ProviderAdapter<T> {
 | GET | `/users` | Roster of all users | master only |
 | POST | `/connections/:provider/start` | Begin OAuth/widget flow | user |
 | GET | `/connections/:provider/callback` | OAuth callback handler | user |
-| DELETE | `/connections/:provider` | Disconnect + delete stored tokens | user |
+| DELETE | `/connections/:provider` | Disconnect + delete stored tokens; history is kept unless `?deleteData=true` (§12) | user |
 | GET | `/scores/:userId?range=28d` | Readiness score series | user (self) / master (any) |
 | GET | `/trends/:userId` | Trend/insight flags | user (self) / master (any) |
 | POST | `/webhooks/terra` | Terra inbound webhook | signature-verified, no user auth |
@@ -413,7 +413,7 @@ Critical flows to cover end-to-end:
 5. Dashboard renders a readiness score and trend chart for a seeded user
 6. Master user sees the full roster and can drill into an individual athlete's dashboard
 7. Regular user is blocked from `/admin` (negative test — assert redirect/403, not just absence of a nav link)
-8. Disconnecting a provider removes its data from subsequent dashboard renders
+8. Disconnecting a provider keeps the user's history on the dashboard by default (switching devices must not reset trends); with the explicit "also delete the data" option it removes that provider's data from subsequent dashboard renders
 
 **Mock all third-party OAuth/webhook calls in CI** via Playwright route interception rather than hitting real Oura/Strava/Terra endpoints in automated tests — keeps the suite fast, deterministic, and independent of sandbox account availability.
 
@@ -446,6 +446,7 @@ Unit tests (Vitest) focus on the scoring engine (§8) with deterministic fixture
 - **Verify every Terra webhook signature before processing** (§5.3) — reject anything that fails.
 - Rate-limit the public API via API Gateway throttling.
 - Scope OAuth requests to the minimum needed — don't request broader Strava/Oura scopes than the metrics actually used.
+- Disconnecting a provider always deletes its tokens. The scalars and trends already derived from it are kept unless the user ticks the erase option on disconnect, or uses the full per-user delete below.
 - Build per-user data export/delete from the start. HRV, sleep, and recovery data is sensitive health data even in a personal project with 10 friends/clients on it — treat it that way from day one rather than retrofitting deletion later.
 
 ---

@@ -2,6 +2,7 @@ import { type ConnectionGrant, createAdapterRegistry } from '@rd/provider-adapte
 import express, { type Request, type Response, Router } from 'express';
 import type pg from 'pg';
 import { type TokenCipher, createTokenCipher } from '../../crypto/token-cipher';
+import { type Recompute, sharedRecompute } from '../../fatigue-fitness/recompute';
 import { SyncService } from '../../sync/sync-service';
 import { getPool } from '../../users/pool';
 import { withOuraUserLock } from './lock';
@@ -39,6 +40,8 @@ export interface OuraWebhookDeps {
   adapter: OuraAdapter;
   config: OuraConfig;
   now?: () => Date;
+  /** Trend/readiness recompute after new data (PLAN §8.4). Default: the process-wide hook. */
+  recompute?: Recompute;
 }
 
 export type EventOutcome =
@@ -147,17 +150,23 @@ export async function processOuraEvent(
 
     const registry = createAdapterRegistry();
     registry.register(deps.adapter);
-    await new SyncService(deps.pool, registry, deps.cipher, now).ingest(userId, PROVIDER, raw);
+    const ingested = await new SyncService(deps.pool, registry, deps.cipher, now).ingest(
+      userId,
+      PROVIDER,
+      raw,
+    );
+    const touched = [...ingested.dates];
 
     if (event.eventType === 'delete') {
       // The deleted document is simply absent from the re-fetch. Remove oura rows of the metric types this
       // collection feeds, inside the window, that the fresh data no longer produces. Idempotent.
       const keep = deps.adapter.normalize(raw).map((r) => `${r.date}|${r.metricType}`);
-      await deps.pool.query(
+      const removed = await deps.pool.query<{ date: string }>(
         `DELETE FROM daily_metrics
           WHERE user_id = $1 AND source = $2 AND metric_type = ANY($3::text[])
             AND date BETWEEN $4::date AND $5::date
-            AND (date::text || '|' || metric_type) <> ALL($6::text[])`,
+            AND (date::text || '|' || metric_type) <> ALL($6::text[])
+          RETURNING to_char(date, 'YYYY-MM-DD') AS date`,
         [
           userId,
           PROVIDER,
@@ -167,9 +176,14 @@ export async function processOuraEvent(
           keep,
         ],
       );
+      touched.push(...removed.rows.map((r) => r.date));
     }
+    return touched;
   });
   if (!locked.acquired) throw new Error('SyncInProgress');
+  // PLAN §8.4: compute on sync. After the lock is released; the hook never throws, so a recompute
+  // failure leaves the delivery `processed` (no Oura retry storm for a scoring problem).
+  await (deps.recompute ?? sharedRecompute())(userId, 'daily_metrics', locked.value);
   return 'processed';
 }
 
@@ -200,6 +214,7 @@ export function createOuraWebhookRouter(overrides: Partial<OuraWebhookDeps> = {}
         adapter: overrides.adapter ?? new OuraAdapter(config),
         config,
         now: overrides.now,
+        recompute: overrides.recompute,
       };
     }
     return cached;
