@@ -13,7 +13,37 @@ export function usersRouter(): Router {
 
   r.get('/', requireUser, requireMaster, async (_req, res, next) => {
     try {
-      res.json({ users: await new UserService(getPool()).list() });
+      const pool = getPool();
+      const users = await new UserService(pool).list();
+      // Roster enrichment (PLAN §10 flow 6): which sources each athlete has connected and when
+      // they last synced. Token columns are never selected.
+      const { rows } = await pool.query<{
+        user_id: string;
+        provider: string;
+        role: 'activity_source' | 'daily_metrics_source';
+        last_synced_at: Date | null;
+      }>(
+        `SELECT user_id, provider, role, last_synced_at
+           FROM provider_connections WHERE is_active ORDER BY provider`,
+      );
+      res.json({
+        users: users.map((u) => {
+          const connections = rows
+            .filter((r) => r.user_id === u.id)
+            .map((r) => ({
+              provider: r.provider,
+              role: r.role,
+              lastSyncAt: r.last_synced_at?.toISOString() ?? null,
+            }));
+          const lastSyncAt =
+            connections
+              .map((c) => c.lastSyncAt)
+              .filter((x): x is string => !!x)
+              .sort()
+              .at(-1) ?? null;
+          return { ...u, connections, lastSyncAt };
+        }),
+      });
     } catch (err) {
       next(err);
     }

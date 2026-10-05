@@ -43,10 +43,7 @@ test.describe('login', () => {
   });
 
   test('wrong password shows a sign-in error on the login page', async ({ page }) => {
-    // Product bug, see docs/reports/7-test-report.md (#3): login/page.tsx does not catch NextAuth's
-    // CredentialsSignin, so bad credentials render Next's "This page couldn't load" server-error
-    // page instead of the login form with a message.
-    test.fail();
+    // Fixed (report bug #3): login/page.tsx catches CredentialsSignin and shows an alert.
     await submit(page, USERS.empty, 'not-the-password');
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
     await expect(

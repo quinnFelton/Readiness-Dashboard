@@ -70,11 +70,7 @@ test.describe('disconnect Oura', () => {
   test('after: the readiness score derived from Oura is gone from the dashboard', async ({
     page,
   }) => {
-    // Product bug, see docs/reports/7-test-report.md (#1): ConnectionService.disconnect deletes
-    // daily_metrics / activity_efforts but leaves readiness_scores and trends, and nothing
-    // recomputes them (no ingest path calls FatigueFitnessService.onSyncComplete), so the dashboard
-    // keeps rendering a readiness score and fatigue/fitness state built from the deleted data.
-    test.fail();
+    // Fixed (report bug #1): disconnect now drops and recomputes trends / readiness_scores.
     await page.goto('/dashboard');
     await expect(page.getByRole('region', { name: 'Current state' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Readiness score' })).toHaveCount(0);

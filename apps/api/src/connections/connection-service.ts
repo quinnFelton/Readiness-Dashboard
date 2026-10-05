@@ -3,6 +3,7 @@ import type { ProviderConnection } from '@rd/shared-types';
 import type pg from 'pg';
 import type { TokenCipher } from '../crypto/token-cipher';
 import type { ConnectionConfigService } from './config-service';
+import { FatigueFitnessService } from '../fatigue-fitness/service';
 import { HttpError } from './errors';
 
 interface ConnectionRow {
@@ -133,12 +134,26 @@ export class ConnectionService {
         userId,
         provider,
       ]);
+      // Derived scores/states were built (in part) from the rows just deleted; drop them so the
+      // dashboard cannot show numbers from data the user asked us to erase (PLAN §12).
+      await client.query(`DELETE FROM trends WHERE user_id = $1`, [userId]);
+      await client.query(`DELETE FROM readiness_scores WHERE user_id = $1`, [userId]);
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
+    }
+    // Rebuild from whatever remains (e.g. another source). Best effort: the disconnect already
+    // succeeded, and a failed recompute must not turn it into an error.
+    try {
+      await new FatigueFitnessService(this.pool, this.configs).onSyncComplete(
+        userId,
+        'daily_metrics',
+      );
+    } catch {
+      // swallowed deliberately; messages may quote health data
     }
   }
 }

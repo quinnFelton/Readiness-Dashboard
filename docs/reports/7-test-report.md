@@ -41,7 +41,17 @@ Also confirmed on the built app: Next 16 recognises `middleware.ts` ("ƒ Proxy (
 build output) and the `/admin` redirect works, so **no rename to `proxy.ts` is needed for behaviour**
 (Next only labels it that way). `/admin` is additionally guarded in `admin/layout.tsx`.
 
-## Product bugs found (tests kept, marked `test.fail()`)
+## Fix status (follow-up run)
+
+All three bugs below are fixed and their `test.fail()` markers removed (assertions unchanged); 41/41
+e2e, `pnpm test` (649), typecheck and lint pass with the e2e seed still in the DB.
+- #1 `ConnectionService.disconnect` now deletes the user's `trends` / `readiness_scores` and recomputes via `onSyncComplete` (best effort).
+- #2 `GET /users` returns `connections` + `lastSyncAt` per user (no token columns).
+- #3 `login/page.tsx` catches `AuthError`, redirects to `/login?error=…` and renders a `role="alert"`.
+- Unit-test isolation: `connections.test.ts` "syncAll" now scopes the user scan to its own two users.
+  The e2e seed is untouched. The `onSyncComplete` call after ingest (still not wired) is for the integrator.
+
+## Product bugs found (originally marked `test.fail()`)
 
 1. **Disconnect leaves derived scores and state behind** — `08-disconnect` › "readiness score … is gone".
    `ConnectionService.disconnect` deletes `daily_metrics`, `activity_efforts` and config rows, but not

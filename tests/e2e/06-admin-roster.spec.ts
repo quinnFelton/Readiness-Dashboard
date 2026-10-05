@@ -30,9 +30,7 @@ test.describe('admin roster (master)', () => {
   });
 
   test('shows each athlete’s connected sources and last sync', async ({ page }) => {
-    // Product bug, see docs/reports/7-test-report.md (#2): GET /users does not return connections or
-    // lastSyncAt, so the roster says "None connected" / "Never" for athletes who are connected.
-    test.fail();
+    // Fixed (report bug #2): GET /users now returns connections and lastSyncAt.
     await page.goto('/admin');
     const seeded = page.getByRole('row').filter({ hasText: USERS.viewer });
     await expect(seeded).toContainText('oura');

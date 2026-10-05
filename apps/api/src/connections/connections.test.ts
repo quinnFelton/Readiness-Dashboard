@@ -221,7 +221,22 @@ describe('connection framework', () => {
       await connect(a);
       await connect(b);
       oura.enqueue([metric('2026-03-01', 'hrv', 1)]).enqueue([metric('2026-03-01', 'hrv', 2)]);
-      const all = await sync.syncAll();
+      // Scope the user scan to this test's two users: the shared DB may also hold other users'
+      // configs (e.g. the Playwright e2e seed), which must neither consume the queued responses
+      // nor have fake metrics written for them.
+      const scoped = new Proxy(pool(), {
+        get(target, prop, recv) {
+          if (prop !== 'query') return Reflect.get(target, prop, recv);
+          return (text: unknown, ...rest: unknown[]) =>
+            typeof text === 'string' && text.includes('DISTINCT user_id FROM connection_configs')
+              ? target.query(
+                  `SELECT DISTINCT user_id FROM connection_configs WHERE user_id = ANY($1)`,
+                  [[a, b]],
+                )
+              : (target.query as (...args: unknown[]) => unknown)(text, ...rest);
+        },
+      });
+      const all = await new SyncService(scoped, registry, cipher).syncAll();
       expect(all.has(a) && all.has(b)).toBe(true);
       expect(await count('daily_metrics', a)).toBe(1);
       expect(await count('daily_metrics', b)).toBe(1);
