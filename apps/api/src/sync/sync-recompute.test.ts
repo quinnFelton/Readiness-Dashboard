@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ConnectionConfigService } from '../connections/config-service';
 import { ConnectionService } from '../connections/connection-service';
 import { LocalAesGcmCipher } from '../crypto/token-cipher';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { closePool, getPool } from '../users/pool';
 import { FakeAdapter } from './fake-adapter';
 import { SyncService } from './sync-service';
@@ -34,7 +35,9 @@ describe('SyncService -> recompute hook', () => {
   const pool = () => getPool();
   let userId: string;
 
+  let releaseDefaults: () => Promise<void> = async () => {};
   beforeAll(async () => {
+    releaseDefaults = await acquireDefaultsTestMutex(pool()); // the default classifier is global
     userId = (
       await pool().query<{ id: string }>(`INSERT INTO users(email) VALUES ($1) RETURNING id`, [
         `sync-${randomBytes(4).toString('hex')}@phase9.invalid`,
@@ -51,6 +54,7 @@ describe('SyncService -> recompute hook', () => {
   });
   afterAll(async () => {
     await pool().query('DELETE FROM users WHERE id = $1', [userId]);
+    await releaseDefaults();
     await closePool();
   });
 

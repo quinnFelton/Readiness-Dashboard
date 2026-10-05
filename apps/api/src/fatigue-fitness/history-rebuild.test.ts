@@ -5,6 +5,7 @@ import { ConnectionConfigService } from '../connections/config-service';
 import { ConnectionService } from '../connections/connection-service';
 import { LocalAesGcmCipher } from '../crypto/token-cipher';
 import { handler } from '../lambda/history-rebuild';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { addDays, todayUtc } from '../trends/http';
 import { closePool, getPool } from '../users/pool';
 import {
@@ -76,7 +77,10 @@ describe('history rebuild (DB)', () => {
       )
     ).rows[0];
 
+  let releaseDefaults: () => Promise<void> = async () => {};
   beforeAll(async () => {
+    // Trend rows need the default classifier, which other test files swap while they run.
+    releaseDefaults = await acquireDefaultsTestMutex(pool());
     userId = await mkUser();
     await seed(userId);
   });
@@ -87,6 +91,7 @@ describe('history rebuild (DB)', () => {
   });
   afterAll(async () => {
     await pool().query('DELETE FROM users WHERE id = ANY($1)', [created]);
+    await releaseDefaults();
     await closePool();
   });
 
