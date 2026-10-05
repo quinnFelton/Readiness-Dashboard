@@ -1,7 +1,7 @@
 import { type AdapterRegistry, defaultRegistry } from '@rd/provider-adapters';
 import { type ErrorRequestHandler, Router } from 'express';
 import type pg from 'pg';
-import { signOAuthState, verifyOAuthState } from '../crypto/oauth-state';
+import { oauthStateSecretFromEnv, signOAuthState, verifyOAuthState } from '../crypto/oauth-state';
 import { type TokenCipher, createTokenCipher } from '../crypto/token-cipher';
 import { requireUser } from '../middleware/rbac';
 import { getPool } from '../users/pool';
@@ -13,7 +13,7 @@ export interface ConnectionsDeps {
   pool?: pg.Pool;
   registry?: AdapterRegistry;
   cipher?: TokenCipher;
-  /** Secret for signing OAuth state; defaults to TOKEN_ENCRYPTION_KEY bytes. */
+  /** Secret for signing OAuth state (>= 32 bytes); defaults to oauthStateSecretFromEnv(). */
   stateSecret?: Buffer;
   nowSec?: () => number;
 }
@@ -30,8 +30,7 @@ export function connectionsRouter(deps: ConnectionsDeps = {}): Router {
   const nowSec = deps.nowSec ?? (() => Math.floor(Date.now() / 1000));
   let cipher = deps.cipher;
   const getCipher = () => (cipher ??= createTokenCipher());
-  const stateSecret = () =>
-    deps.stateSecret ?? Buffer.from(process.env.TOKEN_ENCRYPTION_KEY ?? '', 'base64');
+  const stateSecret = () => deps.stateSecret ?? oauthStateSecretFromEnv();
 
   const configs = new ConnectionConfigService(pool, registry);
   const connections = () => new ConnectionService(pool, registry, getCipher(), configs);

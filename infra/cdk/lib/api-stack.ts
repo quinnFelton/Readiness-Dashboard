@@ -26,7 +26,7 @@ export interface ApiStackProps extends StackProps {
 const repoPath = (rel: string) => fileURLToPath(new URL(`../../../${rel}`, import.meta.url));
 const lambdaEntry = (name: string) => repoPath(`apps/api/src/lambda/${name}.ts`);
 
-type SecretKey = 'db' | 'nextauth' | 'tokenKey' | 'oura' | 'strava' | 'terra';
+type SecretKey = 'db' | 'nextauth' | 'oauthState' | 'tokenKey' | 'oura' | 'strava' | 'terra';
 
 interface FnSpec {
   /** Construct id and function-name suffix. */
@@ -53,7 +53,7 @@ interface FnSpec {
  * (security group) plus the DB secret; there is no IAM database auth.
  *
  *   function              secrets read                          kms:Decrypt  VPC  invoked by
- *   api                   db nextauth token-key oura strava terra   yes       yes  HTTP API (catch-all)
+ *   api                   db nextauth oauth-state token-key oura strava terra   yes   yes  HTTP API (catch-all)
  *   webhook-terra         db terra token-key                    yes          yes  HTTP API /webhooks/terra
  *   webhook-strava        db strava token-key (+invoke replay)  yes          yes  HTTP API /webhooks/strava
  *   webhook-oura          db oura token-key                     yes          yes  HTTP API /webhooks/oura
@@ -103,7 +103,7 @@ export class ApiStack extends Stack {
       vpc: true,
       timeout: Duration.seconds(28), // HTTP API's integration limit is 30 s
       memoryMb: 512,
-      secrets: ['db', 'nextauth', 'tokenKey', 'oura', 'strava', 'terra'],
+      secrets: ['db', 'nextauth', 'oauthState', 'tokenKey', 'oura', 'strava', 'terra'],
       tokenKms: true,
     });
 

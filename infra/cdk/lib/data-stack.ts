@@ -23,6 +23,8 @@ export interface AppSecrets {
   db: secretsmanager.ISecret;
   /** {NEXTAUTH_SECRET} — shared by the web app (mints HS256 API tokens) and the API (verifies them). */
   nextauth: secretsmanager.ISecret;
+  /** {OAUTH_STATE_SECRET} — HMAC key for the signed OAuth state (REST API only). */
+  oauthState: secretsmanager.ISecret;
   /** {KMS_ENCRYPTED_DATA_KEY} — envelope data key, KMS-encrypted (not secret on its own). */
   tokenKey: secretsmanager.ISecret;
   oura: secretsmanager.ISecret;
@@ -153,6 +155,19 @@ export class DataStack extends Stack {
       },
       removalPolicy: removal,
     });
+    // Security review H1: OAuth `state` is the connect flow's only CSRF control, so it gets its own
+    // generated key (>= 32 bytes; the API fails closed below that). Only the REST API reads it.
+    const oauthState = new secretsmanager.Secret(this, 'OAuthStateSecret', {
+      secretName: name('oauth-state'),
+      description: 'OAUTH_STATE_SECRET: HMAC key for the signed OAuth state, read by the API only',
+      generateSecretString: {
+        secretStringTemplate: '{}',
+        generateStringKey: 'OAUTH_STATE_SECRET',
+        passwordLength: 48,
+        excludePunctuation: true,
+      },
+      removalPolicy: removal,
+    });
     const tokenKey = new secretsmanager.Secret(this, 'TokenKeySecret', {
       secretName: name('token-key'),
       description: 'KMS-encrypted token data key. Fill once per stage: see DEPLOY.md step 3',
@@ -204,6 +219,7 @@ export class DataStack extends Stack {
     this.secrets = {
       db: this.cluster.secret!,
       nextauth,
+      oauthState,
       tokenKey,
       oura,
       strava,

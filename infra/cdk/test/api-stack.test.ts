@@ -17,7 +17,7 @@ const FUNCTIONS = [
 // Which Secrets Manager entries (by construct id prefix in the data stack) each role may read,
 // per the table in api-stack.ts / PLAN §11.
 const SECRET_ACCESS: Record<(typeof FUNCTIONS)[number], string[]> = {
-  api: ['db', 'nextauth', 'token-key', 'oura', 'strava', 'terra'],
+  api: ['db', 'nextauth', 'oauth-state', 'token-key', 'oura', 'strava', 'terra'],
   'webhook-terra': ['db', 'terra', 'token-key'],
   'webhook-strava': ['db', 'strava', 'token-key'],
   'webhook-oura': ['db', 'oura', 'token-key'],
