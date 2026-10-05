@@ -60,6 +60,10 @@ describe('lambdas', () => {
       const env = fnProps(f).Environment.Variables as Record<string, unknown>;
       expect(env.PG_POOL_MAX, f).toBe('1');
       expect(env.NODE_ENV).toBe('production');
+      // Security review H3: the shared-password dev login must not exist in any deployed function
+      // (the API also 404s it when NODE_ENV=production), and Lambdas never see the web sign-in secret.
+      expect(env.AUTH_DEV_PASSWORD, `${f}: dev login password`).toBeUndefined();
+      expect(JSON.stringify(env), `${f}: google oauth secret`).not.toContain('GoogleOAuthSecret');
       for (const key of Object.keys(env)) {
         expect(key, `${f}: ${key}`).not.toMatch(
           /PASSWORD|SECRET$|API_KEY|DATABASE_URL|TOKEN_ENCRYPTION_KEY/,

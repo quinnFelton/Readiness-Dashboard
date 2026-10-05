@@ -98,6 +98,8 @@ const guardsOf = (f: Found): GuardInfo[] =>
 // Routes that are unauthenticated BY DESIGN, with the reason. Everything else needs requireUser.
 const PUBLIC_ROUTES: Record<string, string> = {
   'GET /api/v1/health': 'liveness probe, no data',
+  'POST /api/v1/auth/oauth-identity':
+    'called by the web server after Google sign-in; authenticated by an HMAC only the web server can compute (auth/identity.ts), not by a user session',
   'POST /api/v1/auth/login':
     'dev credentials login; 404 in production (apps/api/src/auth/routes.ts)',
 };

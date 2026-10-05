@@ -102,6 +102,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@aws-sdk/client-secrets-manager':
+        specifier: ^3.1146.0
+        version: 3.1146.0
       '@rd/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

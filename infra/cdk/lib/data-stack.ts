@@ -30,6 +30,8 @@ export interface AppSecrets {
   oura: secretsmanager.ISecret;
   strava: secretsmanager.ISecret;
   terra: secretsmanager.ISecret;
+  /** {AUTH_GOOGLE_ID, AUTH_GOOGLE_SECRET} — web sign-in; read by the web compute role only. */
+  googleOauth: secretsmanager.ISecret;
   /** GitHub token Amplify uses to pull the repo. */
   githubToken: secretsmanager.ISecret;
 }
@@ -209,6 +211,14 @@ export class DataStack extends Stack {
       secretObjectValue: placeholders(['TERRA_DEV_ID', 'TERRA_API_KEY', 'TERRA_SIGNING_SECRET']),
       removalPolicy: removal,
     });
+    // Production sign-in (security review H3). Read ONLY by the web app's SSR compute role, never
+    // by a Lambda: the API has no use for the Google client secret.
+    const googleOauth = new secretsmanager.Secret(this, 'GoogleOAuthSecret', {
+      secretName: name('google-oauth'),
+      description: 'Google OAuth client for web sign-in (AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET)',
+      secretObjectValue: placeholders(['AUTH_GOOGLE_ID', 'AUTH_GOOGLE_SECRET']),
+      removalPolicy: removal,
+    });
     const githubToken = new secretsmanager.Secret(this, 'GithubTokenSecret', {
       secretName: name('github-token'),
       description: 'GitHub access token Amplify uses to clone the repo (JSON: {"token": "..."})',
@@ -224,6 +234,7 @@ export class DataStack extends Stack {
       oura,
       strava,
       terra,
+      googleOauth,
       githubToken,
     };
 

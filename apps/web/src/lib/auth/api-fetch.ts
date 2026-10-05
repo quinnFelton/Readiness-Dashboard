@@ -1,9 +1,12 @@
 import 'server-only';
 import { auth } from './index';
 import { mintApiToken } from './api-token';
+import { loadRuntimeSecrets } from './runtime-secrets';
 
 /** Server Components call the REST API through this; attaches a freshly minted token. */
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  // Normally done once by instrumentation.ts; memoised, and retried here if that load failed.
+  await loadRuntimeSecrets();
   const session = await auth();
   if (!session?.user) throw new Error('not authenticated');
   const headers = new Headers(init.headers);
