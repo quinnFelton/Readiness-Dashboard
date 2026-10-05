@@ -18,8 +18,8 @@ Anything else goes in its final report under "Needs from other phases".
 | 6a Dashboard UI | `phase-6a/dashboard` | `apps/web/src/app/dashboard/**`, `apps/web/src/components/charts/**`, `apps/web/src/components/dashboard/**` |
 | 6b Admin UI | `phase-6b/admin` | `apps/web/src/app/admin/**`, `apps/web/src/components/admin/**` |
 | 6c Connections UI | `phase-6c/connections-ui` | `apps/web/src/app/settings/**`, `apps/web/src/components/settings/**` |
-| 7 E2E | `phase-7/e2e` | `tests/e2e/**`, `playwright.config.ts` |
-| 8 Infra | `phase-8/infra` | `infra/cdk/**`, `.github/workflows/deploy*.yml` |
+| 7 E2E | `phase-7/e2e` | `tests/e2e/**`, `playwright.config.ts`, the `e2e` job in `.github/workflows/ci.yml`, minimal additive `test:e2e*` scripts / devDependencies in the root `package.json`. No product code |
+| 8 Infra | `phase-8/infra` | `infra/cdk/**`, `.github/workflows/deploy*.yml`, new files under `apps/api/src/lambda/**`, the `KmsTokenCipher` implementation in `apps/api/src/crypto/**`, minimal additive dependencies in `apps/api/package.json` |
 | 9 Hardening | `phase-9/hardening` | `apps/api/src/privacy/**`, plus targeted fixes anywhere, each listed in its report |
 
 All builder phases may also add **tests next to the code they own** and append one
