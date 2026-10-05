@@ -5,7 +5,11 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { signApiToken } from '../auth/token';
 import { scoresRouter } from '../scores/routes';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { closePool, getPool } from '../users/pool';
+
+// Reads or changes the global default classifier/deriver flags: serialise with other such files.
+let releaseDefaultsLock: () => Promise<void> = async () => {};
 import { trendsRouter } from './routes';
 
 // Needs migrated local Postgres. Rows are seeded directly: these routes only read precomputed data.
@@ -43,6 +47,7 @@ describe('GET /trends and /scores (read precomputed rows only)', () => {
     );
 
   beforeAll(async () => {
+    releaseDefaultsLock = await acquireDefaultsTestMutex(getPool());
     await pool().query(`INSERT INTO classifiers (id, description) VALUES ($1,'test')`, [ALT]);
     [a, b, m] = [await mk('a', 'user'), await mk('b', 'user'), await mk('m', 'master')];
     await seedTrend(a, EF_QUADRANT_V1.id, TODAY, 'acute_fatigue');
@@ -57,6 +62,7 @@ describe('GET /trends and /scores (read precomputed rows only)', () => {
   afterAll(async () => {
     await pool().query('DELETE FROM users WHERE id = ANY($1)', [[a, b, m]]);
     await pool().query('DELETE FROM classifiers WHERE id = $1', [ALT]);
+    await releaseDefaultsLock();
     await closePool();
   });
 

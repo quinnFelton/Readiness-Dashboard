@@ -9,7 +9,11 @@ import express from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { signApiToken } from '../auth/token';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { closePool, getPool } from '../users/pool';
+
+// Reads or changes the global default classifier/deriver flags: serialise with other such files.
+let releaseDefaultsLock: () => Promise<void> = async () => {};
 import { comparisonRouter } from './routes';
 
 // Needs migrated local Postgres. Numeric assertions use a classifier id private to this file and
@@ -65,6 +69,7 @@ describe('comparison routes (DB)', () => {
     request(app).get(path).set('Authorization', bearer(as, role));
 
   beforeAll(async () => {
+    releaseDefaultsLock = await acquireDefaultsTestMutex(getPool());
     for (const id of [ALT, DB_ONLY]) {
       await pool().query(`INSERT INTO classifiers (id, description) VALUES ($1,'test')`, [id]);
     }
@@ -114,6 +119,7 @@ describe('comparison routes (DB)', () => {
     await pool().query('DELETE FROM users WHERE id = ANY($1)', [[u, v, m]]); // cascades events/feedback
     await pool().query('DELETE FROM trends WHERE classifier_id = ANY($1)', [[ALT, DB_ONLY]]);
     await pool().query('DELETE FROM classifiers WHERE id = ANY($1)', [[ALT, DB_ONLY]]);
+    await releaseDefaultsLock();
     await closePool();
   });
 

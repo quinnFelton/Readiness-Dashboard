@@ -5,7 +5,11 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { athleteEventsRouter } from '../athlete-events/routes';
 import { signApiToken } from '../auth/token';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { closePool, getPool } from '../users/pool';
+
+// Reads or changes the global default classifier/deriver flags: serialise with other such files.
+let releaseDefaultsLock: () => Promise<void> = async () => {};
 import { feedbackRouter } from './routes';
 
 // Needs migrated local Postgres.
@@ -38,6 +42,7 @@ describe('feedback and athlete events (DB)', () => {
       .rows[0].n;
 
   beforeAll(async () => {
+    releaseDefaultsLock = await acquireDefaultsTestMutex(getPool());
     [a, b, m] = [await mk('a', 'user'), await mk('b', 'user'), await mk('m', 'master')];
     await pool().query(
       `INSERT INTO trends (user_id, classifier_id, as_of, metric_type, trend_window, direction)
@@ -47,6 +52,7 @@ describe('feedback and athlete events (DB)', () => {
   });
   afterAll(async () => {
     await pool().query('DELETE FROM users WHERE id = ANY($1)', [[a, b, m]]);
+    await releaseDefaultsLock();
     await closePool();
   });
 

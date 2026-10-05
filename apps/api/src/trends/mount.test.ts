@@ -3,7 +3,11 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { signApiToken } from '../auth/token';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { closePool, getPool } from '../users/pool';
+
+// Reads or changes the global default classifier/deriver flags: serialise with other such files.
+let releaseDefaultsLock: () => Promise<void> = async () => {};
 
 // Integration stage D: the phase-5b routers are mounted on the real app (apps/api/src/app.ts) after
 // express.json(). Every route must reach its router and answer 401/403 — never 404, which would mean
@@ -19,6 +23,7 @@ describe('phase 5b routers are mounted on the real app', () => {
   const EVENT = '44444444-4444-4444-8444-444444444444';
 
   beforeAll(async () => {
+    releaseDefaultsLock = await acquireDefaultsTestMutex(getPool());
     vi.stubEnv('NEXTAUTH_SECRET', 'test-secret-test-secret-test-secret');
     vi.stubEnv('TOKEN_ENCRYPTION_KEY', randomBytes(32).toString('base64'));
     const tag = randomBytes(4).toString('hex');
@@ -36,6 +41,7 @@ describe('phase 5b routers are mounted on the real app', () => {
   afterAll(async () => {
     vi.unstubAllEnvs();
     await getPool().query('DELETE FROM users WHERE id = ANY($1::uuid[])', [[a, b, m]]); // cascades
+    await releaseDefaultsLock();
     await closePool();
   });
 

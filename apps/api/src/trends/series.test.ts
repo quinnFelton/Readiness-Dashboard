@@ -3,7 +3,11 @@ import express from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { signApiToken } from '../auth/token';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { closePool, getPool } from '../users/pool';
+
+// Reads or changes the global default classifier/deriver flags: serialise with other such files.
+let releaseDefaultsLock: () => Promise<void> = async () => {};
 import { trendsRouter } from './routes';
 
 // GET /trends/:userId returns `series` for the dashboard charts (PLAN §9): the same data the
@@ -52,6 +56,7 @@ describe('GET /trends/:userId series', () => {
     );
 
   beforeAll(async () => {
+    releaseDefaultsLock = await acquireDefaultsTestMutex(getPool());
     await pool().query(`INSERT INTO derivers (id, description) VALUES ($1,'test')`, [ALT_DERIVER]);
     [a, b] = [await mkUser('a'), await mkUser('b')];
     // Terra preferred over Oura for this user (priority 0 wins), overriding the Oura-first default.
@@ -75,6 +80,7 @@ describe('GET /trends/:userId series', () => {
   afterAll(async () => {
     await pool().query('DELETE FROM users WHERE id = ANY($1)', [[a, b]]);
     await pool().query('DELETE FROM derivers WHERE id = $1', [ALT_DERIVER]);
+    await releaseDefaultsLock();
     await closePool();
   });
 

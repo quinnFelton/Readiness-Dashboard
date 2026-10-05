@@ -9,7 +9,11 @@ import {
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { ConnectionConfigService } from '../connections/config-service';
 import { addDays } from '../trends/http';
+import { acquireDefaultsTestMutex } from '../test-utils/defaults-mutex';
 import { closePool, getPool } from '../users/pool';
+
+// Reads or changes the global default classifier/deriver flags: serialise with other such files.
+let releaseDefaultsLock: () => Promise<void> = async () => {};
 import { FatigueFitnessService } from './service';
 
 // Needs migrated local Postgres (docker compose up -d db && pnpm db:migrate). No network.
@@ -67,6 +71,7 @@ describe('FatigueFitnessService (PLAN §8.4, §8.7, §8.8)', () => {
     ).rows;
 
   beforeAll(async () => {
+    releaseDefaultsLock = await acquireDefaultsTestMutex(getPool());
     await pool().query(`INSERT INTO classifiers (id, description) VALUES ($1, 'test')`, [
       ALT_CLASSIFIER,
     ]);
@@ -93,6 +98,7 @@ describe('FatigueFitnessService (PLAN §8.4, §8.7, §8.8)', () => {
     await pool().query('DELETE FROM trends WHERE classifier_id = $1', [ALT_CLASSIFIER]);
     await pool().query('DELETE FROM classifiers WHERE id = $1', [ALT_CLASSIFIER]);
     await pool().query('DELETE FROM derivers WHERE id = $1', [ALT_DERIVER]);
+    await releaseDefaultsLock();
     await closePool();
   });
 
