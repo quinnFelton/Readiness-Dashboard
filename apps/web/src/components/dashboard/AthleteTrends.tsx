@@ -19,6 +19,8 @@ export interface AthleteTrendsProps {
   userId: string;
   viewerId: string;
   isSelf?: boolean;
+  /** Master drill-down only (PLAN §8.7): load this classifier's rows instead of the default. */
+  classifier?: string | null;
 }
 
 interface MetricSpec {
@@ -76,8 +78,9 @@ export async function AthleteTrends({
   userId,
   viewerId,
   isSelf = userId === viewerId,
+  classifier = null,
 }: AthleteTrendsProps) {
-  const result = await loadDashboardData(userId);
+  const result = await loadDashboardData(userId, classifier ? { classifier } : undefined);
   if (!result.ok) return <ErrorPanel message={result.message} onRetryHref="/dashboard/trends" />;
 
   const { trends, feedback } = result.data;

@@ -27,10 +27,18 @@ export function describeError(e: unknown): string {
   return 'We could not load this data. Please try again.';
 }
 
-export async function loadDashboardData(userId: string): Promise<LoadResult> {
+export interface LoadOptions {
+  /** Master drill-down only (PLAN §8.7): which classifier's rows to load; null/undefined = default. */
+  classifier?: string | null;
+}
+
+export async function loadDashboardData(
+  userId: string,
+  opts: LoadOptions = {},
+): Promise<LoadResult> {
   const [trends, scores, feedback, events] = await Promise.allSettled([
-    getTrends(userId),
-    getScores(userId),
+    getTrends(userId, undefined, opts.classifier),
+    getScores(userId, undefined, opts.classifier),
     getFeedback(userId),
     getEvents(userId),
   ]);

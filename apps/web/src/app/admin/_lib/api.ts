@@ -39,15 +39,56 @@ interface UsersResponse {
   }>;
 }
 
-// PLAN §7 trends row shape as the /trends/:userId route is expected to return it.
+// PLAN §7 trends row shape. The real 5b route (apps/api/src/trends/routes.ts) puts the classified
+// state in `direction` for metricType 'fatigue_fitness_state'; `state` is accepted for older mocks.
 interface TrendsResponse {
-  trends: Array<{ asOf: string; metricType: string; state?: string | null; classifierId?: string }>;
+  trends: Array<{
+    asOf: string;
+    metricType: string;
+    direction?: string | null;
+    state?: string | null;
+    classifierId?: string;
+  }>;
 }
 
 export function latestFatigueState(t: TrendsResponse['trends']) {
-  const rows = t.filter((r) => r.metricType === 'fatigue_fitness_state' && r.state);
+  const rows = t
+    .filter((r) => r.metricType === 'fatigue_fitness_state')
+    .map((r) => ({ asOf: r.asOf, state: r.direction ?? r.state ?? null }))
+    .filter((r) => r.state);
   rows.sort((a, b) => b.asOf.localeCompare(a.asOf));
   return rows[0] ?? null;
+}
+
+// Real 5b GET /comparison/classifiers row (apps/api/src/comparison/routes.ts).
+interface ApiClassifierRow {
+  id: string;
+  description?: string | null;
+  isDefault: boolean;
+  agreement?: { up: number; down: number; rate: number | null };
+  backtest?: { eventsConsidered?: number; eventsPreceded?: number; falseAlarms?: number };
+}
+
+/** Map the 5b shape onto the UI's ClassifierComparisonRow; rows already in UI shape pass through. */
+export function toComparisonRow(
+  r: ApiClassifierRow | ClassifierComparisonRow,
+): ClassifierComparisonRow {
+  if (!('agreement' in r) || r.agreement === undefined) return r as ClassifierComparisonRow;
+  const bt = (r.backtest ?? {}) as NonNullable<ApiClassifierRow['backtest']>;
+  const hits = bt.eventsPreceded ?? 0;
+  return {
+    id: r.id,
+    description: r.description ?? null,
+    isDefault: r.isDefault,
+    votesUp: r.agreement.up,
+    votesDown: r.agreement.down,
+    agreementRate: r.agreement.rate,
+    backtest: {
+      hits,
+      misses: Math.max(0, (bt.eventsConsidered ?? 0) - hits),
+      falseAlarms: bt.falseAlarms ?? 0,
+    },
+  };
 }
 
 /** Roster: GET /users, enriched with each athlete's latest state when /users doesn't carry it. */
@@ -92,10 +133,10 @@ export async function fetchRoster(): Promise<RosterRow[]> {
 
 export async function fetchClassifiers(range: Range): Promise<ClassifierComparisonRow[]> {
   return (
-    await getJson<{ classifiers: ClassifierComparisonRow[] }>(
+    await getJson<{ classifiers: Array<ApiClassifierRow | ClassifierComparisonRow> }>(
       `/comparison/classifiers?range=${range}`,
     )
-  ).classifiers;
+  ).classifiers.map(toComparisonRow);
 }
 
 export async function fetchDerivers(): Promise<DeriverRow[]> {

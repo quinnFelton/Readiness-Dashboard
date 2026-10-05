@@ -1,27 +1,27 @@
+import { AthleteDashboard } from '../dashboard/AthleteDashboard';
+
 /**
- * Placeholder for phase 6a's `AthleteDashboard` (not on main yet). The integrator should replace
- * the body with `<AthleteDashboard userId={userId} classifier={classifier} />`.
+ * Admin drill-down body: phase 6a's `AthleteDashboard` for the chosen athlete, loading the
+ * classifier picked with `?classifier=` (PLAN §8.7; null = default). Wired at integration stage D.
+ * The viewer is the signed-in master, so ratings are attributed to them, not the athlete.
  */
 export function AthleteDashboardSlot({
   userId,
+  viewerId,
   classifier,
 }: {
   userId: string;
+  viewerId: string;
   classifier: string | null;
 }) {
+  const qs = classifier ? `?classifier=${encodeURIComponent(classifier)}` : '';
   return (
-    <section
-      data-testid="athlete-dashboard-placeholder"
-      className="rounded border border-dashed p-6 text-slate-600 dark:text-slate-300"
-    >
-      Athlete dashboard for <code>{userId}</code>
-      {classifier ? (
-        <>
-          {' '}
-          (classifier <code>{classifier}</code>)
-        </>
-      ) : null}{' '}
-      will render here.
-    </section>
+    <AthleteDashboard
+      userId={userId}
+      viewerId={viewerId}
+      isSelf={false}
+      classifier={classifier}
+      trendsHref={`/admin/athletes/${encodeURIComponent(userId)}/trends${qs}`}
+    />
   );
 }

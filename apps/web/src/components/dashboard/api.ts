@@ -52,19 +52,66 @@ async function send(path: string, method: string, body?: unknown): Promise<Respo
 
 const uid = (userId: string) => encodeURIComponent(userId);
 
-export async function getTrends(userId: string, range = '90d'): Promise<TrendsResponse> {
+/** `?range=…[&classifier=…]`. The classifier is only sent when chosen (master drill-down, §8.7). */
+const query = (range: string, classifier?: string | null) =>
+  `?range=${encodeURIComponent(range)}` +
+  (classifier ? `&classifier=${encodeURIComponent(classifier)}` : '');
+
+const EMPTY_SERIES = (): TrendsResponse['series'] => ({
+  efPeak20: [],
+  efOverall: [],
+  hrv: [],
+  restingHr: [],
+});
+
+// Integration stage D: the real 5b route (apps/api/src/trends/routes.ts) returns
+// `{ userId, classifierId, range, trends }` with the classifier at the top level and no `series`.
+// Normalize here (the place dashboard.ts designates for contract drift) so the components keep
+// coding against TrendsResponse: copy classifierId onto each row, and default `series` to empty
+// until the API serves raw metric series (see docs/reports/integration-D.md).
+type RawTrends = {
+  classifierId: string;
+  trends: Array<Omit<TrendsResponse['trends'][number], 'classifierId'> & { classifierId?: string }>;
+  series?: Partial<TrendsResponse['series']>;
+};
+export function normalizeTrends(raw: RawTrends): TrendsResponse {
+  return {
+    classifierId: raw.classifierId,
+    trends: (raw.trends ?? []).map((t) => ({
+      ...t,
+      classifierId: t.classifierId ?? raw.classifierId,
+    })),
+    series: { ...EMPTY_SERIES(), ...(raw.series ?? {}) },
+  };
+}
+
+export async function getTrends(
+  userId: string,
+  range = '90d',
+  classifier?: string | null,
+): Promise<TrendsResponse> {
   if (mock()) return mock() === 'empty' ? EMPTY_TRENDS : FIXTURE_TRENDS;
-  return getJson(`/trends/${uid(userId)}?range=${encodeURIComponent(range)}`);
+  return normalizeTrends(
+    await getJson<RawTrends>(`/trends/${uid(userId)}${query(range, classifier)}`),
+  );
 }
 
-export async function getScores(userId: string, range = '28d'): Promise<ScoresResponse> {
+export async function getScores(
+  userId: string,
+  range = '28d',
+  classifier?: string | null,
+): Promise<ScoresResponse> {
   if (mock()) return mock() === 'empty' ? { scores: [] } : FIXTURE_SCORES;
-  return getJson(`/scores/${uid(userId)}?range=${encodeURIComponent(range)}`);
+  return getJson(`/scores/${uid(userId)}${query(range, classifier)}`);
 }
 
+// The real 5b route returns `{ userId, range, votes }`; older fixtures use `{ feedback }`.
 export async function getFeedback(userId: string, range = '90d'): Promise<FeedbackResponse> {
   if (mock()) return FIXTURE_FEEDBACK;
-  return getJson(`/feedback/${uid(userId)}?range=${encodeURIComponent(range)}`);
+  const raw = await getJson<Partial<FeedbackResponse> & { votes?: FeedbackResponse['feedback'] }>(
+    `/feedback/${uid(userId)}${query(range)}`,
+  );
+  return { feedback: raw.feedback ?? raw.votes ?? [] };
 }
 
 export async function getEvents(userId: string): Promise<AthleteEventsResponse> {

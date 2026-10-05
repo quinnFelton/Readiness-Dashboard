@@ -149,6 +149,8 @@ describe('athlete drill-down page', () => {
   ];
   it('forwards known ?classifier and ignores unknown ids', async () => {
     const { default: Page } = await import('./athletes/[userId]/page');
+    // Integration D: the page now resolves the viewer (for vote attribution in AthleteDashboard).
+    auth.mockResolvedValue({ user: { id: 'm1', role: 'master' } });
     apiFetch.mockResolvedValue(json({ classifiers }));
     const el = await Page({
       params: Promise.resolve({ userId: 'u1' }),

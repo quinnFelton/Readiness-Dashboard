@@ -31,6 +31,8 @@ export interface AthleteDashboardProps {
   trendsHref?: string;
   /** Controls the empty-state wording: a new user is sent to /settings/connections. */
   isSelf?: boolean;
+  /** Master drill-down only (PLAN §8.7): load this classifier's rows instead of the default. */
+  classifier?: string | null;
 }
 
 const CHART_DAYS = 90;
@@ -40,8 +42,9 @@ export async function AthleteDashboard({
   viewerId,
   trendsHref = '/dashboard/trends',
   isSelf = userId === viewerId,
+  classifier = null,
 }: AthleteDashboardProps) {
-  const result = await loadDashboardData(userId);
+  const result = await loadDashboardData(userId, classifier ? { classifier } : undefined);
   if (!result.ok) return <ErrorPanel message={result.message} onRetryHref="/dashboard" />;
 
   const { trends, scores, feedback, events } = result.data;

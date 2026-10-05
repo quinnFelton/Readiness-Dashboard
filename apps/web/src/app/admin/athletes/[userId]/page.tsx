@@ -1,5 +1,6 @@
 import { AthleteDashboardSlot } from '../../../../components/admin/AthleteDashboardSlot';
 import { ClassifierSwitch } from '../../../../components/admin/ClassifierSwitch';
+import { requireViewer } from '../../../dashboard/session';
 import { fetchClassifiers } from '../../_lib/api';
 
 export default async function AthletePage({
@@ -9,7 +10,7 @@ export default async function AthletePage({
   params: Promise<{ userId: string }>;
   searchParams: Promise<{ classifier?: string }>;
 }) {
-  const [{ userId }, sp] = await Promise.all([params, searchParams]);
+  const [{ userId }, sp, viewer] = await Promise.all([params, searchParams, requireViewer()]);
   const classifiers = await fetchClassifiers('90d');
   // Ignore unknown ids rather than forwarding arbitrary input to the API.
   const selected = classifiers.some((c) => c.id === sp.classifier) ? (sp.classifier ?? null) : null;
@@ -17,7 +18,7 @@ export default async function AthletePage({
     <main className="space-y-6">
       <h1 className="text-2xl font-semibold">Athlete</h1>
       <ClassifierSwitch classifiers={classifiers} selected={selected} />
-      <AthleteDashboardSlot userId={userId} classifier={selected} />
+      <AthleteDashboardSlot userId={userId} viewerId={viewer.id} classifier={selected} />
     </main>
   );
 }
