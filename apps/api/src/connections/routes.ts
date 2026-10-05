@@ -19,7 +19,7 @@ export interface ConnectionsDeps {
 }
 
 const PROVIDER_RE = /^[a-z0-9_-]{1,32}$/;
-const RESERVED = new Set(['config']);
+const RESERVED = new Set(['config', 'providers']);
 
 // PLAN §6 REST surface. Authorization: every route is behind requireUser and operates only on
 // req.user.id — there is no :userId parameter, so a `user` can never address another user's data.
@@ -44,6 +44,21 @@ export function connectionsRouter(deps: ConnectionsDeps = {}): Router {
     if (!p || !PROVIDER_RE.test(p) || RESERVED.has(p)) throw new HttpError(404, 'unknown provider');
     return p;
   };
+
+  // Registered adapters for the connections screen, so the UI never hardcodes the list (PLAN §6).
+  // Registry metadata only: no per-user data, but still behind requireUser like every route here.
+  r.get('/providers', (_req, res) => {
+    const roles = ['activity_source', 'daily_metrics_source'] as const;
+    const providers = roles.flatMap((role) =>
+      registry.listByRole(role).map((a) => ({
+        key: a.key,
+        role: a.role,
+        displayName: a.displayName ?? a.key,
+        flow: a.connectFlow ?? 'oauth',
+      })),
+    );
+    res.json({ providers });
+  });
 
   r.get('/config', async (req, res) => {
     const userId = req.user!.id;

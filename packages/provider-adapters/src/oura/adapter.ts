@@ -70,6 +70,8 @@ interface TokenResponse {
 export class OuraAdapter implements ProviderAdapter<NormalizedDailyMetric> {
   readonly role = 'daily_metrics_source' as const;
   readonly key = 'oura';
+  readonly displayName = 'Oura';
+  readonly connectFlow = 'oauth' as const;
   readonly derivationVersion = OURA_DERIVATION_VERSION;
 
   constructor(private readonly cfg: OuraConfig) {}

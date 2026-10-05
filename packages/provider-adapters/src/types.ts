@@ -47,6 +47,10 @@ export interface ProviderAdapter<T> {
   role: ConnectionRole;
   /** "oura", "strava", "terra", future: "garmin", ... */
   key: string;
+  /** Shown in the connections screen. Defaults to the key. */
+  displayName?: string;
+  /** How `start` connects: an OAuth redirect (default) or a hosted widget (Terra). */
+  connectFlow?: 'oauth' | 'widget';
   /** Bump when parsing logic changes (PLAN §13). Defaults to 1. */
   derivationVersion?: number;
   /** Pure: raw provider payload -> normalized rows. Must not do I/O. */

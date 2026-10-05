@@ -29,6 +29,8 @@ export function createTerraAdapter(cfg: TerraAdapterConfig): TerraAdapter {
   return {
     role: 'daily_metrics_source',
     key: 'terra',
+    displayName: 'Zepp (via Terra)',
+    connectFlow: 'widget',
     // Bump when normalize.ts mapping changes (PLAN §13).
     derivationVersion: 1,
     client,
