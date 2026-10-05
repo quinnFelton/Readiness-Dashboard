@@ -105,12 +105,13 @@ async function insertData(userId: string): Promise<void> {
     }
   }
   // Connected providers. Tokens stay NULL: these rows exist for the UI/disconnect, nothing syncs.
+  // The external id is per user: one provider account maps to one local user (phase 9 migration).
   await pool.query(
     `INSERT INTO provider_connections (user_id, provider, role, external_user_id, last_synced_at)
-     VALUES ($1, 'oura', 'daily_metrics_source', 'oura-seed', now()),
-            ($1, 'strava', 'activity_source', 'strava-seed', now())
+     VALUES ($1, 'oura', 'daily_metrics_source', 'oura-seed-' || $2::text, now()),
+            ($1, 'strava', 'activity_source', 'strava-seed-' || $2::text, now())
      ON CONFLICT (user_id, provider) DO UPDATE SET is_active = true`,
-    [userId],
+    [userId, userId],
   );
   await pool.query(
     `INSERT INTO connection_configs (user_id, role, provider, priority)

@@ -107,3 +107,13 @@ This is strong evidence, but it is not something I observed in this session.
 3. COST.md unit prices are unverified against AWS pricing pages.
 4. The Terra lost-`auth`-webhook decision (PLAN §5.3) is still pending.
 5. Real-AWS behaviour (IAM DB auth, RDS CA verification, Secrets Manager rotation, KMS) has only been tested through mocks and CDK assertions. A dev-stage deploy smoke test is advisable.
+
+## Owner follow-ups (2026-10-05)
+
+- **The "NOT verified green" status above is superseded.** CI on this PR ran the migrations and the unit suite green (6 migrations, 105 files, 917 tests). The Playwright job failed, for three reasons that were all in the e2e harness, not in product code:
+  1. The e2e seed gave two users the same provider account id, which phase 9's new unique index (security review M2) rejects. The seed now uses a per-user external id.
+  2. The `/users` lookup helper logged in on every call and tripped phase 9's dev-login throttle. It now fetches the list once per worker and retries a throttled login.
+  3. Flow 8 hovered one fixed x position on the hero chart. Phase 9 stopped drawing empty series, which widened the plot, so that position no longer sat on a ride. The test now sweeps the plot and reads every tooltip.
+- **Checks after these fixes:** typecheck and lint clean; `pnpm test:e2e` 43/43 locally.
+- **Local-only test fragility, not fixed:** `sync/sync-recompute.test.ts` › "syncAll goes through the same path" fails on a database that already holds the e2e seed users, because `syncAll` visits every user with a source configured. It passes in CI, where unit and e2e jobs use separate databases.
+- **Not a config value:** the dev-login throttle (10 attempts, then one per 2 s) is hardcoded in `apps/api/src/auth/routes.ts`. The route is disabled in production.
